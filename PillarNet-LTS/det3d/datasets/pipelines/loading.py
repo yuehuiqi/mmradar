@@ -34,6 +34,25 @@ def read_file(path, tries=2, num_point_feature=4, virtual=False):
     return points
 
 
+def read_mmradar_file(info):
+    path = Path(info["lidar_path"])
+    point_format = info.get("point_format", "bin")
+    if point_format == "npy":
+        points = np.load(path).astype(np.float32)
+    elif point_format == "bin":
+        points = np.fromfile(path, dtype=np.float32).reshape(-1, 4)
+    else:
+        raise NotImplementedError(f"Unsupported MMRadar point format: {point_format}")
+
+    points = points[:, :4].astype(np.float32, copy=True)
+    if info.get("coordinate_transform") == "camera_to_lidar":
+        xyz = points[:, :3].copy()
+        points[:, 0] = xyz[:, 2]
+        points[:, 1] = -xyz[:, 0]
+        points[:, 2] = -xyz[:, 1]
+    return points
+
+
 def remove_close(points, radius: float) -> None:
     """
     Removes point too close within a certain radius from origin.
@@ -168,6 +187,9 @@ class LoadPointCloudFromFile(object):
                 res["lidar"]["points"] = points
                 res["lidar"]["times"] = times
                 res["lidar"]["combined"] = np.hstack([points, times])
+        elif self.type == "MMRadarDataset":
+            points = read_mmradar_file(info)
+            res["lidar"]["points"] = points
         else:
             raise NotImplementedError
 
@@ -191,6 +213,11 @@ class LoadPointCloudAnnotations(object):
                 "velocities": info["gt_boxes_velocity"].astype(np.float32),
             }
         elif res["type"] == 'WaymoDataset' and "gt_boxes" in info:
+            res["lidar"]["annotations"] = {
+                "boxes": info["gt_boxes"].astype(np.float32),
+                "names": info["gt_names"],
+            }
+        elif res["type"] == "MMRadarDataset" and "gt_boxes" in info:
             res["lidar"]["annotations"] = {
                 "boxes": info["gt_boxes"].astype(np.float32),
                 "names": info["gt_names"],

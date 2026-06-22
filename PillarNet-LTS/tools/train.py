@@ -4,10 +4,7 @@ import sys
 import datetime
 import os, sys
 import os.path as osp
-sys.path.append(osp.abspath('.'))
-pythonlist = sys.path
-del pythonlist[5]
-sys.path = pythonlist
+sys.path.insert(0, osp.abspath('.'))
 from numba.core.errors import NumbaDeprecationWarning, NumbaWarning
 import warnings
 warnings.simplefilter('ignore', category=NumbaDeprecationWarning)

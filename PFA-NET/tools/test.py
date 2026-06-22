@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
-from eval_utils import eval_utils, eval_pointseg
+from eval_utils import eval_utils
 from pcdet.config import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_file
 from pcdet.datasets import build_dataloader
 from pcdet.models import build_network
@@ -135,6 +135,8 @@ def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir
         with open(ckpt_record_file, 'a') as f:
             print('%s' % cur_epoch_id, file=f)
         logger.info('Epoch %s has been evaluated' % cur_epoch_id)
+        if args.max_waiting_mins <= 0:
+            break
 
 
 def main():

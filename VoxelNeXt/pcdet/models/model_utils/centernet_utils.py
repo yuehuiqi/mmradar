@@ -262,7 +262,8 @@ def _topk_1d(scores, batch_size, batch_idx, obj, K=40, nuscenes=False):
             topk_score, topk_ind = torch.topk(topk_scores.view(-1), min(K, topk_scores.view(-1).shape[-1]))
             #topk_score, topk_ind = torch.topk(score.reshape(-1), K)
 
-        topk_classes = (topk_ind // K).int()
+        per_class_k = topk_scores.shape[-1]
+        topk_classes = (topk_ind // per_class_k).int()
         topk_inds = topk_inds.view(-1).gather(0, topk_ind)
         #print('topk_inds', topk_inds)
 
@@ -273,9 +274,17 @@ def _topk_1d(scores, batch_size, batch_idx, obj, K=40, nuscenes=False):
         topk_inds_list.append(topk_inds)
         topk_classes_list.append(topk_classes)
 
-    topk_score = torch.stack(topk_score_list)
-    topk_inds = torch.stack(topk_inds_list)
-    topk_classes = torch.stack(topk_classes_list)
+    max_len = max(x.shape[0] for x in topk_inds_list)
+
+    def pad_first_dim(tensor, value):
+        if tensor.shape[0] == max_len:
+            return tensor
+        pad_shape = (max_len - tensor.shape[0],) + tensor.shape[1:]
+        return torch.cat([tensor, tensor.new_full(pad_shape, value)], dim=0)
+
+    topk_score = torch.stack([pad_first_dim(x, -torch.inf) for x in topk_score_list])
+    topk_inds = torch.stack([pad_first_dim(x, 0) for x in topk_inds_list])
+    topk_classes = torch.stack([pad_first_dim(x, 0) for x in topk_classes_list])
 
     return topk_score, topk_inds, topk_classes
 
@@ -297,6 +306,7 @@ def decode_bbox_from_voxels(batch_size, indices, obj, _cls, rot_cos, rot_sin,
     batch_idx = indices[:, 0]
     spatial_indices = indices[:, 1:]
     scores, inds, class_ids = _topk_1d(_cls, batch_size, batch_idx, obj, K=K)
+    K = scores.shape[1]
 
     center = gather_feat_idx(center, inds, batch_size, batch_idx)
     rot_sin = gather_feat_idx(rot_sin, inds, batch_size, batch_idx)
@@ -351,6 +361,7 @@ def decode_bbox_from_voxels_nuscenes(batch_size, indices, obj, rot_cos, rot_sin,
     batch_idx = indices[:, 0]
     spatial_indices = indices[:, 1:]
     scores, inds, class_ids = _topk_1d(None, batch_size, batch_idx, obj, K=K, nuscenes=True)
+    K = scores.shape[1]
 
     center = gather_feat_idx(center, inds, batch_size, batch_idx)
     rot_sin = gather_feat_idx(rot_sin, inds, batch_size, batch_idx)

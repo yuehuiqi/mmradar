@@ -1,6 +1,6 @@
 from functools import partial
 
-import spconv
+from spconv import pytorch as spconv
 import torch.nn as nn
 
 

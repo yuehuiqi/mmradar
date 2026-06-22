@@ -117,7 +117,7 @@ class PillarVFE(VFETemplate):
         features *= mask
         for pfn in self.pfn_layers:
             features = pfn(features)
-        features = features.squeeze()
+        features = features.squeeze(dim=1)
         batch_dict['pillar_features'] = features
         return batch_dict
 
@@ -189,6 +189,6 @@ class PillarVFE3D(VFETemplate):
         features *= mask
         for pfn in self.pfn_layers:
             features = pfn(features)
-        features = features.squeeze()
+        features = features.squeeze(dim=1)
         batch_dict['voxel_features'] = features
         return batch_dict

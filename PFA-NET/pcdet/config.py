@@ -55,7 +55,9 @@ def merge_new_config(config, new_config):
                 yaml_config = yaml.load(f, Loader=yaml.FullLoader)
             except:
                 yaml_config = yaml.load(f)
-        config.update(EasyDict(yaml_config))
+        base_config = EasyDict()
+        merge_new_config(base_config, EasyDict(yaml_config))
+        config.update(base_config)
 
     for key, val in new_config.items():
         if not isinstance(val, dict):

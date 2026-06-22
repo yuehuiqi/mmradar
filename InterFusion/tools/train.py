@@ -17,8 +17,8 @@ from pcdet.utils import common_utils
 from train_utils.optimization import build_optimizer, build_scheduler
 from train_utils.train_utils import train_model
 
-# set environment variables
-os.environ["CUDA_VISIBLE_DEVICES"] = '9'
+# Keep the user's CUDA_VISIBLE_DEVICES setting.  The upstream script forced GPU 9,
+# which breaks on single-GPU workstations and WSL setups.
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
@@ -120,9 +120,7 @@ def main():
 
     # log to the file, save and print the contents written to the log file
     logger.info('**********************Start logging**********************')
-    gpu_list = os.environ['CUDA_VISIBLE_DEVICES'] 
-        if 'CUDA_VISIBLE_DEVICES' in os.environ.keys()
-        else 'ALL'
+    gpu_list = os.environ.get('CUDA_VISIBLE_DEVICES', 'ALL')
     logger.info('CUDA_VISIBLE_DEVICES=%s' % gpu_list)
 
     # setting up distributed training

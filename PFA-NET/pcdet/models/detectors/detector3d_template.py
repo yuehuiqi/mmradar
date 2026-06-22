@@ -323,7 +323,7 @@ class Detector3DTemplate(nn.Module):
 
         logger.info('==> Loading parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
         loc_type = torch.device('cpu') if to_cpu else None
-        checkpoint = torch.load(filename, map_location=loc_type)
+        checkpoint = torch.load(filename, map_location=loc_type, weights_only=False)
         model_state_disk = checkpoint['model_state']
 
         if 'version' in checkpoint:
@@ -351,7 +351,7 @@ class Detector3DTemplate(nn.Module):
 
         logger.info('==> Loading parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
         loc_type = torch.device('cpu') if to_cpu else None
-        checkpoint = torch.load(filename, map_location=loc_type)
+        checkpoint = torch.load(filename, map_location=loc_type, weights_only=False)
         epoch = checkpoint.get('epoch', -1)
         it = checkpoint.get('it', 0.0)
 
@@ -367,7 +367,7 @@ class Detector3DTemplate(nn.Module):
                 src_file, ext = filename[:-4], filename[-3:]
                 optimizer_filename = '%s_optim.%s' % (src_file, ext)
                 if os.path.exists(optimizer_filename):
-                    optimizer_ckpt = torch.load(optimizer_filename, map_location=loc_type)
+                    optimizer_ckpt = torch.load(optimizer_filename, map_location=loc_type, weights_only=False)
                     optimizer.load_state_dict(optimizer_ckpt['optimizer_state'])
 
         if 'version' in checkpoint:

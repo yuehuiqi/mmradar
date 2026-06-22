@@ -38,7 +38,7 @@ if __name__ == '__main__':
         install_requires=[
             'numpy',
             'torch>=1.1',
-            'spconv',
+            # spconv is installed explicitly because its package name depends on CUDA.
             'numba',
             'tensorboardX',
             'easydict',

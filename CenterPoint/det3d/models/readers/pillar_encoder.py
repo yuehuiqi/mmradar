@@ -159,7 +159,7 @@ class PillarFeatureNet(nn.Module):
         for pfn in self.pfn_layers:
             features = pfn(features)
 
-        return features.squeeze()
+        return features.squeeze(dim=1)
 
 
 @BACKBONES.register_module

@@ -6,7 +6,29 @@ try:
     import torch_scatter
 except Exception as e:
     # Incase someone doesn't want to use dynamic pillar vfe and hasn't installed torch_scatter
-    pass
+    torch_scatter = None
+
+
+def scatter_mean(src, index, dim=0):
+    if torch_scatter is not None:
+        return torch_scatter.scatter_mean(src, index, dim=dim)
+    assert dim == 0
+    dim_size = int(index.max().item()) + 1 if index.numel() > 0 else 0
+    out = src.new_zeros((dim_size,) + src.shape[1:])
+    out.index_add_(0, index, src)
+    count = src.new_zeros((dim_size,))
+    count.index_add_(0, index, torch.ones(index.shape[0], dtype=src.dtype, device=src.device))
+    return out / count.clamp_min(1).view(-1, *([1] * (src.dim() - 1)))
+
+
+def scatter_max(src, index, dim=0):
+    if torch_scatter is not None:
+        return torch_scatter.scatter_max(src, index, dim=dim)
+    assert dim == 0
+    dim_size = int(index.max().item()) + 1 if index.numel() > 0 else 0
+    out = src.new_full((dim_size,) + src.shape[1:], -torch.inf)
+    out.scatter_reduce_(0, index.view(-1, *([1] * (src.dim() - 1))).expand_as(src), src, reduce='amax', include_self=True)
+    return out, None
 
 from .vfe_template import VFETemplate
 
@@ -37,7 +59,7 @@ class PFNLayerV2(nn.Module):
         x = self.linear(inputs)
         x = self.norm(x) if self.use_norm else x
         x = self.relu(x)
-        x_max = torch_scatter.scatter_max(x, unq_inv, dim=0)[0]
+        x_max = scatter_max(x, unq_inv, dim=0)[0]
 
         if self.last_vfe:
             return x_max
@@ -102,7 +124,7 @@ class DynamicPillarVFE(VFETemplate):
 
         unq_coords, unq_inv, unq_cnt = torch.unique(merge_coords, return_inverse=True, return_counts=True, dim=0)
 
-        points_mean = torch_scatter.scatter_mean(points_xyz, unq_inv, dim=0)
+        points_mean = scatter_mean(points_xyz, unq_inv, dim=0)
         f_cluster = points_xyz - points_mean[unq_inv, :]
 
         f_center = torch.zeros_like(points_xyz)
@@ -196,7 +218,7 @@ class DynamicPillarVFE_3d(VFETemplate):
 
         unq_coords, unq_inv, unq_cnt = torch.unique(merge_coords, return_inverse=True, return_counts=True, dim=0)
 
-        points_mean = torch_scatter.scatter_mean(points_xyz, unq_inv, dim=0)
+        points_mean = scatter_mean(points_xyz, unq_inv, dim=0)
         f_cluster = points_xyz - points_mean[unq_inv, :]
 
         f_center = torch.zeros_like(points_xyz)

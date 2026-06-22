@@ -1,8 +1,16 @@
 from .builder import build_dataset
 
+from .mmradar import MMRadarDataset
+
 # from .cityscapes import CityscapesDataset
-from .nuscenes import NuScenesDataset
-from .waymo import WaymoDataset
+try:
+    from .nuscenes import NuScenesDataset
+except ImportError:
+    NuScenesDataset = None
+try:
+    from .waymo import WaymoDataset
+except ImportError:
+    WaymoDataset = None
 
 # from .custom import CustomDataset
 from .dataset_wrappers import ConcatDataset, RepeatDataset
@@ -24,4 +32,5 @@ __all__ = [
     "RepeatDataset",
     "DATASETS",
     "build_dataset",
+    "MMRadarDataset",
 ]

@@ -1,10 +1,19 @@
-from .nuscenes import NuScenesDataset
-from .waymo import WaymoDataset
+from .mmradar import MMRadarDataset
 
-dataset_factory = {
-    "NUSC": NuScenesDataset,
-    "WAYMO": WaymoDataset
-}
+try:
+    from .nuscenes import NuScenesDataset
+except ImportError:
+    NuScenesDataset = None
+try:
+    from .waymo import WaymoDataset
+except ImportError:
+    WaymoDataset = None
+
+dataset_factory = {"MMRADAR": MMRadarDataset}
+if NuScenesDataset is not None:
+    dataset_factory["NUSC"] = NuScenesDataset
+if WaymoDataset is not None:
+    dataset_factory["WAYMO"] = WaymoDataset
 
 
 def get_dataset(dataset_name):

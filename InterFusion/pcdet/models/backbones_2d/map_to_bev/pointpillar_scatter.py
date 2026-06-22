@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 
 
-matrix = 
-
 class PointPillarScatter(nn.Module):
     def __init__(self, model_cfg, grid_size, **kwargs):
         super().__init__()

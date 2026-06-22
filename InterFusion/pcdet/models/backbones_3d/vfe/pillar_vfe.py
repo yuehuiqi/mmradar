@@ -146,13 +146,18 @@ class PillarVFE(VFETemplate):
 
     def forward(self, batch_dict, **kwargs):
         if 'voxels' in batch_dict:
-            voxel_features, voxel_num_points, coords = batch_dict['voxels'],
-                                                    batch_dict['voxel_num_points'], batch_dict['voxel_coords']
+            voxel_features, voxel_num_points, coords = (
+                batch_dict['voxels'],
+                batch_dict['voxel_num_points'],
+                batch_dict['voxel_coords'],
+            )
             # Summing all point clouds in each pillar.
             # if keepdim=True is set, the original dimension information will be kept.
             # Divide the summation information by the number of points in each point cloud to get the average of all point clouds in each pillar.
-            points_mean = voxel_features[:, :, :3].sum(dim=1, keepdim=True) /
-                        voxel_num_points.type_as(voxel_features).view(-1, 1, 1)
+            points_mean = (
+                voxel_features[:, :, :3].sum(dim=1, keepdim=True)
+                / voxel_num_points.type_as(voxel_features).view(-1, 1, 1)
+            )
             
             # Subtract the average value of the corresponding pillar from each point cloud data to get the difference.
             f_cluster = voxel_features[:, :, :3] - points_mean
@@ -205,7 +210,7 @@ class PillarVFE(VFETemplate):
                 features = pfn(features)
 
             # abstract a 64-dimensional feature in each pillar
-            features = features.squeeze()
+            features = features.squeeze(dim=1)
             batch_dict['pillar_features'] = features
 
         else:

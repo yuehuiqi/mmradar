@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Native/CUDA build outputs
+build/
+*.so
+*.pyd
+*.dll
+*.lib
+*.exp
+
+# Training/evaluation outputs
+output/
+work_dirs/
+logs/
+tensorboard/
+*.log
+events.out.tfevents*
+
+# Local smoke/run artifacts
+environment/smoke_logs/
+
+# Editor/OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

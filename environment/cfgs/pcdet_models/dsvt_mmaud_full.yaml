@@ -1,0 +1,7 @@
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/dsvt_mmaud_smoke.yaml
+
+DATA_CONFIG:
+  _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_mmaud_full.yaml
+
+OPTIMIZATION:
+  NUM_EPOCHS: 80
