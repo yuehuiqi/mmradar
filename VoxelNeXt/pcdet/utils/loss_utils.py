@@ -452,7 +452,11 @@ class RegLossSparse(nn.Module):
         batch_size = mask.shape[0]
         for bs_idx in range(batch_size):
             batch_inds = batch_index==bs_idx
-            pred.append(output[batch_inds][ind[bs_idx]])
+            batch_output = output[batch_inds]
+            if batch_output.shape[0] == 0 or mask[bs_idx].sum() == 0:
+                pred.append(output.new_zeros((ind.shape[1], output.shape[1])))
+                continue
+            pred.append(batch_output[ind[bs_idx].clamp(max=batch_output.shape[0] - 1)])
         pred = torch.stack(pred)
 
         loss = _reg_loss(pred, target, mask)
@@ -479,9 +483,16 @@ class IouLossSparse(nn.Module):
 
         loss = 0
         for bs_idx in range(batch_size):
+            if mask[bs_idx].sum() == 0:
+                continue
             batch_inds = batch_index==bs_idx
-            pred = iou_pred[batch_inds][ind[bs_idx]][mask[bs_idx]]
-            pred_box = box_pred[batch_inds][ind[bs_idx]][mask[bs_idx]]
+            batch_iou_pred = iou_pred[batch_inds]
+            batch_box_pred = box_pred[batch_inds]
+            if batch_iou_pred.shape[0] == 0:
+                continue
+            safe_ind = ind[bs_idx].clamp(max=batch_iou_pred.shape[0] - 1)
+            pred = batch_iou_pred[safe_ind][mask[bs_idx]]
+            pred_box = batch_box_pred[safe_ind][mask[bs_idx]]
             target = iou3d_nms_utils.boxes_aligned_iou3d_gpu(pred_box, box_gt[bs_idx])
             target = 2 * target - 1
             loss += F.l1_loss(pred, target, reduction='sum')
@@ -553,8 +564,13 @@ class IouRegLossSparse(nn.Module):
 
         loss = 0
         for bs_idx in range(batch_size):
+            if mask[bs_idx].sum() == 0:
+                continue
             batch_inds = batch_index==bs_idx
-            pred_box = box_pred[batch_inds][ind[bs_idx]]
+            batch_box_pred = box_pred[batch_inds]
+            if batch_box_pred.shape[0] == 0:
+                continue
+            pred_box = batch_box_pred[ind[bs_idx].clamp(max=batch_box_pred.shape[0] - 1)]
             iou = self.bbox3d_iou_func(pred_box[mask[bs_idx]], box_gt[bs_idx])
             loss += (1. - iou).sum()
 

@@ -17,7 +17,9 @@ class PointPillarScatter(nn.Module):
 
             # Store the data converted to pseudo-images in this list.
             batch_spatial_features = []
-            batch_size = coords[:, 0].max().int().item() + 1
+            batch_size = int(batch_dict.get('batch_size', 0))
+            if batch_size <= 0:
+                batch_size = coords[:, 0].max().int().item() + 1 if coords.numel() else 0
 
             # Process each piece of data in the batch sequentially and independently.
             for batch_idx in range(batch_size):
@@ -58,8 +60,13 @@ class PointPillarScatter(nn.Module):
             radar_pillar_features, radar_coords = batch_dict['radar_pillar_features'], batch_dict['radar_voxel_coords']
             lidar_batch_spatial_features = []
             radar_batch_spatial_features = []
-            lidar_batch_size = lidar_coords[:, 0].max().int().item() + 1
-            radar_batch_size = radar_coords[:, 0].max().int().item() + 1
+            batch_size = int(batch_dict.get('batch_size', 0))
+            if batch_size <= 0:
+                lidar_batch_size = lidar_coords[:, 0].max().int().item() + 1 if lidar_coords.numel() else 0
+                radar_batch_size = radar_coords[:, 0].max().int().item() + 1 if radar_coords.numel() else 0
+                batch_size = max(lidar_batch_size, radar_batch_size)
+            lidar_batch_size = batch_size
+            radar_batch_size = batch_size
 
             for lidar_batch_idx in range(lidar_batch_size):
                 lidar_spatial_feature = torch.zeros(

@@ -1,0 +1,43 @@
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/OpenPCDet/tools/cfgs/kitti_models/pointrcnn.yaml
+
+CLASS_NAMES: ['Drone']
+
+DATA_CONFIG:
+  _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_aiqii_smoke.yaml
+  DATA_PROCESSOR:
+    - NAME: mask_points_and_boxes_outside_range
+      REMOVE_OUTSIDE_BOXES: True
+    - NAME: sample_points
+      NUM_POINTS: {
+        'train': 2048,
+        'test': 2048
+      }
+    - NAME: shuffle_points
+      SHUFFLE_ENABLED: {
+        'train': True,
+        'test': False
+      }
+
+MODEL:
+  POINT_HEAD:
+    TARGET_CONFIG:
+      GT_EXTRA_WIDTH: [0.1, 0.1, 0.1]
+      BOX_CODER_CONFIG: {
+        'use_mean_size': True,
+        'mean_size': [[0.50, 0.45, 0.20]]
+      }
+  ROI_HEAD:
+    TARGET_CONFIG:
+      SAMPLE_ROI_BY_EACH_CLASS: False
+      CLS_FG_THRESH: 0.45
+      CLS_BG_THRESH: 0.20
+      CLS_BG_THRESH_LO: 0.05
+      REG_FG_THRESH: 0.35
+  POST_PROCESSING:
+    SCORE_THRESH: 0.05
+    EVAL_METRIC: mmradar
+
+OPTIMIZATION:
+  BATCH_SIZE_PER_GPU: 2
+  NUM_EPOCHS: 2
+  LR: 0.003

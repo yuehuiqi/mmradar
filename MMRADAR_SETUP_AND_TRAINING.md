@@ -1,6 +1,6 @@
 # MMRadarDetect 环境配置与训练说明
 
-更新时间：2026-06-22
+更新时间：2026-06-24
 
 ## 1. 当前机器与基础环境
 
@@ -40,8 +40,22 @@
 
 | 数据集 | 数据根目录 | train | val |
 |---|---|---:|---:|
-| aiQiiDataset | `/mnt/e/Scholar/dataset/aiQiiDataset/radar_openpcdet` | 13200 | 2560 |
+| aiQiiDataset | `/mnt/e/Scholar/dataset/aiQiiDataset/radar_openpcdet` | 11238 | 2560 |
 | MMAUD | `/mnt/e/Scholar/dataset/mmaud/mmaud_radar_camera_openpcdet` | 3834 | 185 |
+
+aiQiiDataset 的原始 train info 中有 13200 帧。2026-06-23 检查正式训练失败原因时，发现其中一部分帧过于稀疏，增强和范围过滤后会在部分模型里变成空 voxel / 空 sparse feature；另外少数帧存在同一无人机框重复标注。当前版本对 aiQii 做了训练集侧的轻量清洗：
+
+- train：从 13200 帧过滤为 11238 帧；
+- val：保持 2560 帧不动，避免验证集被人为筛选；
+- 过滤规则：训练帧至少需要 16 个范围内点、16 个 BEV 占用格、16 个 3D voxel；
+- 重复框处理：aiQii 是单无人机场景，多框样本按中位数框合并为一个 `Drone` 框，共移除 11 个重复/近重复框；
+- 原始 pkl 已备份到 `E:\Scholar\dataset\aiQiiDataset\radar_openpcdet\backup_before_aiqii_repair_20260623`。
+
+如需重新生成数据索引，在 PowerShell 中运行：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- /home/yuehui/miniforge3/envs/PointPillar/bin/python /mnt/e/Scholar/mmradarDetect/environment/prepare_mmradar_datasets.py
+```
 
 同时生成 smoke 子集：
 
@@ -74,6 +88,10 @@ COORDINATE_TRANSFORM: camera_to_lidar
 - 修复稀疏毫米波点云单 voxel 时 `squeeze()` 把特征挤成 1D 的问题。
 - 修复 DSVT 缺 `torch_scatter` 时的 PyTorch 原生 fallback。
 - 修复 VoxelNeXt 稀疏 voxel 数少于 `MAX_OBJ_PER_SAMPLE` 时评估解码报错。
+- 修复 aiQii 极稀疏帧导致 PCDet scatter 用 `coords[:, 0].max()+1` 推断 batch size 错误的问题；现在优先使用 dataloader 写入的 `batch_dict['batch_size']`。
+- 修复 VoxelNeXt sparse target assign / regression loss 在某个 batch 样本没有有效 sparse 输出时仍索引空张量的问题。
+- aiQii 的 DSVT / VoxelNeXt 正式训练 batch size 调整为 2，避免 BatchNorm 在极端小样本上只看到单个特征。
+- 批量运行脚本对子进程使用干净 Linux `PATH`，避免 WSL 继承 Windows PATH 后让 `gpustat` 或 Python entrypoint 找错环境。
 - MMAUD smoke/full PCDet 配置关闭几何增强，避免极稀疏点云被旋转出范围。
 - 修复 Det3D 评估接口对 `{token: prediction}` 字典和 `results` 返回格式的兼容。
 - 七个项目统一为周期验证：正式训练每 5 epoch 验证一次，最终 epoch 必定验证。
@@ -83,6 +101,8 @@ COORDINATE_TRANSFORM: camera_to_lidar
 ## 5. Smoke 训练结果
 
 已完成 14 个 smoke 实验：7 个项目 × 2 个数据集。每个实验至少完成 1 epoch 训练。当前版本中 PCDet 与 Det3D 两类项目都会在 smoke 最终 epoch 后自动评估；下表耗时是首次接入版本的历史记录。
+
+2026-06-23 修复 aiQii 数据和稀疏帧兼容后，又对 aiQii 重新做了验证：7 个项目的 aiQii smoke 均通过；OpenPCDet、DSVT、VoxelNeXt 还额外跑了全量 train + 全量 val 的 1 epoch 检查，均能正常训练并输出指标。
 
 | 实验 | 状态 | 用时 |
 |---|---:|---:|
@@ -232,7 +252,7 @@ cd /mnt/e/Scholar/mmradarDetect/OpenPCDet/tools
 cd /mnt/e/Scholar/mmradarDetect/DSVT/tools
 /home/yuehui/miniforge3/envs/DSVT/bin/python train.py \
   --cfg_file cfgs/mmradar_models/dsvt_aiqii_full.yaml \
-  --workers 4 --batch_size 1 --extra_tag full_aiqii
+  --workers 4 --batch_size 2 --extra_tag full_aiqii
 ```
 
 MMAUD 建议先用 batch size 2：
@@ -249,7 +269,7 @@ MMAUD 建议先用 batch size 2：
 cd /mnt/e/Scholar/mmradarDetect/VoxelNeXt/tools
 /home/yuehui/miniforge3/envs/VoxelNeXt/bin/python train.py \
   --cfg_file cfgs/mmradar_models/voxelnext_aiqii_full.yaml \
-  --workers 4 --batch_size 1 --extra_tag full_aiqii
+  --workers 4 --batch_size 2 --extra_tag full_aiqii
 ```
 
 MMAUD 建议先用 batch size 2：
@@ -304,7 +324,165 @@ PYTHONPATH=/mnt/e/Scholar/mmradarDetect/PillarNet-LTS \
 
 1. smoke 已验证通路正常；正式训练时可直接观察 `periodic_metrics/metrics_history.json` 的五轮指标曲线。
 2. MMAUD 极稀疏，建议 batch size 不低于 2；如果显存允许可以尝试 4。
-3. aiQiiDataset 点数更多，可以先 batch size 2 起步。
+3. aiQiiDataset 已按稀疏帧规则清洗训练集；当前一键脚本对所有 PCDet 系模型使用 batch size 2 起步。
 4. 当前 full 配置默认 `NUM_EPOCHS/total_epochs=80`，可按需要调低或调高。
 5. `output/`、`work_dirs/`、批量日志、模型权重和数据文件不进入 Git；提交源码前只提交配置、脚本、公共指标代码和文档。
 6. 已经训练完成但没有周期验证的旧实验不会自动补出历史指标；可以单独评估其最终 checkpoint，或者用新 run tag 重新训练。
+
+## 10. 2026-06-24 扩展模型复现补充
+
+这次新加入了 `RadarPillar`、`SD4R`、`RadarNeXt` 三个项目，同时检查了 `OpenPCDet` 自带的 PointRCNN、Part-A2、PV-RCNN、Voxel R-CNN、PV-RCNN++、MPPNet。结论如下：
+
+| 模型/项目 | 当前处理结论 | 环境 | 说明 |
+|---|---:|---|---|
+| PointRCNN | 已接入并 smoke 通过 | `PointPillar` | OpenPCDet 系列，共用现有环境 |
+| Part-A2 | 已接入并 smoke 通过 | `PointPillar` | 需要把 BEV 压缩通道改为 128 |
+| PV-RCNN | 已接入并 smoke 通过 | `PointPillar` | PFE 特征源收窄为 `['bev']`，适配当前毫米波稀疏输入 |
+| Voxel R-CNN | 已接入并 smoke 通过 | `PointPillar` | 需要把 BEV 压缩通道改为 128 |
+| PV-RCNN++ | 已接入并 smoke 通过 | `PointPillar` | CenterHead 的 `MAX_OBJ_PER_SAMPLE` 从 500 调小到 100 |
+| MPPNet | 暂不纳入 | `PointPillar` | 当前公开配置主要面向 Waymo 多帧序列/记忆库，现有 aiQii/MMAUD info 是单帧雷达格式，缺少序列元数据 |
+| RadarPillar | 已接入并 smoke 通过 | `RadarPillar` | 独立环境，已编译 CUDA 扩展 |
+| RadarNeXt | 已接入并 smoke 通过 | `RadarNeXt` | 独立环境，MMEngine/MMCV 栈已适配 |
+| SD4R | 暂不纳入 | `SD4R` | 原项目依赖 PyTorch 1.9.1/cu111、mmcv-full 1.4.0、旧版 mmdet/numba 等，和 RTX 5070 Ti + CUDA 12.8 + Python 3.10 栈冲突过大 |
+
+新下载的三个项目已经清理掉内层版本管理信息：`RadarPillar`、`SD4R`、`RadarNeXt` 内部不再保留独立 `.git` / `.github` / `.gitattributes` 等仓库痕迹，后续统一由 `E:\Scholar\mmradarDetect` 根仓库管理。
+
+### 新增环境
+
+| 环境 | Python | Torch/CUDA | 主要用途 |
+|---|---:|---|---|
+| `RadarPillar` | 3.10 | `torch==2.7.1+cu128` | RadarPillar 训练与自带 CUDA ops |
+| `RadarNeXt` | 3.10 | `torch==2.7.1+cu128` | RadarNeXt / MMEngine / MMCV |
+| `SD4R` | 3.10 | `torch==2.7.1+cu128` | 已创建基础环境，但项目本身暂不纳入复现 |
+
+RTX 50 系列在 WSL 下编译扩展时，重点是让编译器使用 conda 环境里的 CUDA 12.8，而不是系统默认 `/usr/local/cuda`：
+
+```bash
+export CUDA_HOME=/home/yuehui/miniforge3/envs/RadarPillar
+export CPATH=$CUDA_HOME/targets/x86_64-linux/include
+export LIBRARY_PATH=$CUDA_HOME/targets/x86_64-linux/lib
+export LD_LIBRARY_PATH=$CUDA_HOME/lib/python3.10/site-packages/torch/lib:$CUDA_HOME/targets/x86_64-linux/lib:$CUDA_HOME/lib
+export TORCH_CUDA_ARCH_LIST="12.0"
+```
+
+### 关键适配点
+
+- `OpenPCDet/pcdet/models/roi_heads/roi_head_template.py`：修复 ROI BCE loss 在 `rcnn_cls_labels=-1` ignore 样本上触发 CUDA assert 的问题。现在先把 ignore 标签临时夹到 `[0, 1]`，再用 mask 排除。
+- `OpenPCDet/pcdet/datasets/processor/data_processor.py`：稀疏雷达点数不足时，`sample_points` 允许有放回采样，避免小样本直接报错。
+- `environment/cfgs/pcdet_models/*`：新增 PointRCNN、Part-A2、PV-RCNN、Voxel R-CNN、PV-RCNN++ 的 aiQii/MMAUD smoke/full 配置。
+- `RadarPillar`：新增 `MMRadarDataset` 接入；关闭原项目对速度分解特征的假设；修复 Python 3.10 `collections.Iterable`；修复 PyTorch 2.6+ `torch.load(weights_only=False)`；延迟导入 `eval_pointseg`，避开 KITTI/numba CUDA rotate IoU 在 RTX 50/CUDA12.8 上的崩溃；训练中加入周期验证和 `periodic_metrics/metrics_history.json`。
+- `RadarNeXt`：新增 `MMRadarDataset` 和 `MMRadarMetric`；把硬编码 `CUDA_VISIBLE_DEVICES=6` 改为默认 GPU 0；配置 CenterPoint/RadarNeXt 单类 `Drone` 检测，使用 4 维毫米波点云特征。
+
+### 扩展模型 smoke 结论
+
+以下 smoke 都完成了 1 epoch train → validation → 指标输出：
+
+| 模型 | aiQiiDataset | MMAUD |
+|---|---:|---:|
+| PointRCNN | OK | OK |
+| Part-A2 | OK | OK |
+| PV-RCNN | OK | OK |
+| Voxel R-CNN | OK | OK |
+| PV-RCNN++ | OK | OK |
+| RadarPillar | OK | OK |
+| RadarNeXt | OK | OK |
+
+1 epoch smoke 的分数只用于确认环境、数据流、loss、checkpoint、验证和指标链路正常，不代表正式收敛结果。
+
+### 一键运行扩展模型
+
+新增脚本：
+
+```text
+E:\Scholar\mmradarDetect\environment\run_mmradar_extended_suite_wsl.py
+```
+
+正式跑 MMAUD：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- python3 /mnt/e/Scholar/mmradarDetect/environment/run_mmradar_extended_suite_wsl.py `
+  --dataset mmaud --run-tag mmaud_ext_v1 --mode full --workers 4 --retries 2
+```
+
+正式跑 aiQiiDataset：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- python3 /mnt/e/Scholar/mmradarDetect/environment/run_mmradar_extended_suite_wsl.py `
+  --dataset aiqii --run-tag aiqii_ext_v1 --mode full --workers 4 --retries 2
+```
+
+只快速复测 smoke：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- python3 /mnt/e/Scholar/mmradarDetect/environment/run_mmradar_extended_suite_wsl.py `
+  --dataset aiqii --run-tag smoke_check --mode smoke --workers 2 --retries 0
+```
+
+只跑某几个模型：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- python3 /mnt/e/Scholar/mmradarDetect/environment/run_mmradar_extended_suite_wsl.py `
+  --dataset mmaud --run-tag mmaud_ext_v1 --mode full --only PointRCNN RadarPillar RadarNeXt
+```
+
+可用模型名：
+
+```text
+PointRCNN PartA2 PVRCNN VoxelRCNN PVRCNNPlusPlus RadarPillar RadarNeXt
+```
+
+扩展脚本输出目录：
+
+```text
+E:\Scholar\mmradarDetect\environment\extended_runs\<dataset>\<mode>\<run-tag>\
+├── suite_status.json
+├── EXTENDED_MODELS_METRICS.md
+├── EXTENDED_MODELS_METRICS.json
+└── <Model>_attempt_<N>.log
+```
+
+`EXTENDED_MODELS_METRICS.json` 会汇总所有历史验证指标。OpenPCDet/RadarPillar 读取 `periodic_metrics/metrics_history.json`，RadarNeXt 读取 MMEngine 的 `vis_data/scalars.json`。
+
+### 单模型命令示例
+
+OpenPCDet 扩展模型以 PointRCNN 为例：
+
+```bash
+cd /mnt/e/Scholar/mmradarDetect/OpenPCDet/tools
+/home/yuehui/miniforge3/envs/PointPillar/bin/python train.py \
+  --cfg_file cfgs/mmradar_models/pointrcnn_aiqii_full.yaml \
+  --workers 4 --batch_size 2 --extra_tag aiqii_ext_v1 \
+  --ckpt_save_interval 10 --max_ckpt_save_num 9 --eval_interval 5 --max_waiting_mins 0
+```
+
+把配置名替换为：
+
+```text
+pointrcnn_aiqii_full.yaml / pointrcnn_mmaud_full.yaml
+parta2_aiqii_full.yaml / parta2_mmaud_full.yaml
+pvrcnn_aiqii_full.yaml / pvrcnn_mmaud_full.yaml
+voxelrcnn_aiqii_full.yaml / voxelrcnn_mmaud_full.yaml
+pvrcnnplusplus_aiqii_full.yaml / pvrcnnplusplus_mmaud_full.yaml
+```
+
+RadarPillar：
+
+```bash
+cd /mnt/e/Scholar/mmradarDetect/RadarPillar
+LD_LIBRARY_PATH=/home/yuehui/miniforge3/envs/RadarPillar/lib/python3.10/site-packages/torch/lib:/home/yuehui/miniforge3/envs/RadarPillar/targets/x86_64-linux/lib:/home/yuehui/miniforge3/envs/RadarPillar/lib \
+PYTHONPATH=/mnt/e/Scholar/mmradarDetect:/mnt/e/Scholar/mmradarDetect/RadarPillar \
+/home/yuehui/miniforge3/envs/RadarPillar/bin/python tools/train.py \
+  --cfg_file tools/cfgs/mmradar_models/radarpillar_aiqii_full.yaml \
+  --workers 4 --batch_size 2 --extra_tag aiqii_ext_v1 \
+  --ckpt_save_interval 10 --max_ckpt_save_num 9 --max_waiting_mins 0
+```
+
+RadarNeXt：
+
+```bash
+cd /mnt/e/Scholar/mmradarDetect/RadarNeXt
+PYTHONPATH=/mnt/e/Scholar/mmradarDetect:/mnt/e/Scholar/mmradarDetect/RadarNeXt \
+/home/yuehui/miniforge3/envs/RadarNeXt/bin/python tools/train.py \
+  configs/mmradar/radarnext_centerpoint_aiqii_full.py \
+  --work-dir work_dirs/radarnext_aiqii_ext_v1
+```

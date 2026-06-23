@@ -1,0 +1,44 @@
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/OpenPCDet/tools/cfgs/kitti_models/pv_rcnn.yaml
+
+CLASS_NAMES: ['Drone']
+
+DATA_CONFIG:
+  _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_aiqii_smoke_voxel3d.yaml
+
+MODEL:
+  MAP_TO_BEV:
+    NUM_BEV_FEATURES: 128
+  DENSE_HEAD:
+    ANCHOR_GENERATOR_CONFIG: [
+      {
+        'class_name': 'Drone',
+        'anchor_sizes': [[0.50, 0.45, 0.20]],
+        'anchor_rotations': [0, 1.57],
+        'anchor_bottom_heights': [-0.10],
+        'align_center': False,
+        'feature_map_stride': 8,
+        'matched_threshold': 0.35,
+        'unmatched_threshold': 0.15
+      }
+    ]
+  PFE:
+    NUM_KEYPOINTS: 512
+    FEATURES_SOURCE: ['bev']
+  POINT_HEAD:
+    TARGET_CONFIG:
+      GT_EXTRA_WIDTH: [0.1, 0.1, 0.1]
+  ROI_HEAD:
+    TARGET_CONFIG:
+      SAMPLE_ROI_BY_EACH_CLASS: False
+      CLS_FG_THRESH: 0.45
+      CLS_BG_THRESH: 0.20
+      CLS_BG_THRESH_LO: 0.05
+      REG_FG_THRESH: 0.35
+  POST_PROCESSING:
+    SCORE_THRESH: 0.05
+    EVAL_METRIC: mmradar
+
+OPTIMIZATION:
+  BATCH_SIZE_PER_GPU: 2
+  NUM_EPOCHS: 2
+  LR: 0.003

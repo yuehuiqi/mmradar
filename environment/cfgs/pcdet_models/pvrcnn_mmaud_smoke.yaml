@@ -1,0 +1,4 @@
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/pvrcnn_aiqii_smoke.yaml
+
+DATA_CONFIG:
+  _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_mmaud_smoke_voxel3d.yaml

@@ -1,6 +1,8 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+dist/
+*.egg
 
 # Native/CUDA build outputs
 build/
@@ -29,6 +31,21 @@ events.out.tfevents*
 # Local smoke/run artifacts
 environment/smoke_logs/
 environment/full_runs/
+environment/extended_runs/
+.mim/
+
+# Downloaded-project sample data and heavy rendered documentation
+**/demo/data/
+**/tests/data/
+**/test_samples/
+**/docs/test/
+**/tools_det3d/view-of-delft-dataset/docs/notebook_html/
+**/tools_det3d/view-of-delft-dataset/figures/
+**/tools_det3d/view-of-delft-dataset/docs/figures/
+**/tools_det3d/view-of-delft-dataset/*.ipynb
+**/tools_det3d/view-of-delft-dataset/example_set/
+**/docs/load_raw_data/
+**/resources/*.gif
 
 # Editor/OS noise
 .vscode/

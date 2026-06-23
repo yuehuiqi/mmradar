@@ -37,6 +37,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mmaud-root", type=Path, default=DATASETS["mmaud"])
     parser.add_argument("--smoke-train", type=int, default=64)
     parser.add_argument("--smoke-val", type=int, default=32)
+    parser.add_argument(
+        "--aiqii-min-train-points",
+        type=int,
+        default=16,
+        help="Drop aiQii train frames with fewer in-range radar points.",
+    )
+    parser.add_argument(
+        "--aiqii-min-train-bev-cells",
+        type=int,
+        default=16,
+        help="Drop aiQii train frames with fewer occupied 0.5m BEV cells.",
+    )
+    parser.add_argument(
+        "--aiqii-min-train-voxels",
+        type=int,
+        default=16,
+        help="Drop aiQii train frames with fewer occupied 0.5m 3D voxels.",
+    )
     return parser.parse_args()
 
 
@@ -78,11 +96,64 @@ def count_npy_points(path: Path) -> int:
     return int(array.shape[0])
 
 
+def load_points(path: Path, point_format: str) -> np.ndarray:
+    if point_format == "bin":
+        points = np.fromfile(str(path), dtype=np.float32)
+        if points.size % 4:
+            raise ValueError(f"Expected float32 xyzi binary point cloud in {path}")
+        return points.reshape(-1, 4)
+    points = np.load(path)
+    if points.ndim != 2 or points.shape[1] < 4:
+        raise ValueError(f"Expected point cloud with shape [N, >=4] in {path}, got {points.shape}")
+    return points[:, :4].astype(np.float32, copy=False)
+
+
+def occupied_cells(points: np.ndarray, voxel_size: tuple[float, float, float]) -> int:
+    if not len(points):
+        return 0
+    point_cloud_range = np.asarray([-16, -20, -8, 64, 20, 8], dtype=np.float32)
+    lower, upper = point_cloud_range[:3], point_cloud_range[3:]
+    mask = np.logical_and(points[:, :3] >= lower, points[:, :3] < upper).all(axis=1)
+    in_range = points[mask, :3]
+    if not len(in_range):
+        return 0
+    voxel = np.asarray(voxel_size, dtype=np.float32)
+    coords = np.floor((in_range - lower) / voxel).astype(np.int64)
+    return int(len(np.unique(coords, axis=0)))
+
+
+def in_range_point_count(points: np.ndarray) -> int:
+    if not len(points):
+        return 0
+    point_cloud_range = np.asarray([-16, -20, -8, 64, 20, 8], dtype=np.float32)
+    lower, upper = point_cloud_range[:3], point_cloud_range[3:]
+    return int(np.logical_and(points[:, :3] >= lower, points[:, :3] < upper).all(axis=1).sum())
+
+
+def canonical_single_drone_box(boxes: np.ndarray, names: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
+    """Normalize aiQii duplicate multi-box frames into one single-drone box.
+
+    aiQii is a single-UAV capture set. A few converted training frames contain
+    duplicate or near-duplicate Drone boxes from timestamp fusion. Keeping all
+    of them can trigger legacy OpenPCDet anchor target shape bugs, so we keep a
+    robust median box for those frames.
+    """
+
+    if len(boxes) <= 1:
+        return boxes, names, 0
+    box = np.median(boxes.astype(np.float32), axis=0, keepdims=True).astype(np.float32)
+    box[:, 6] = 0.0
+    return box, np.asarray(["Drone"], dtype="<U5"), int(len(boxes) - 1)
+
+
 def prepare_dataset(
     name: str,
     root: Path,
     smoke_train: int,
     smoke_val: int,
+    aiqii_min_train_points: int,
+    aiqii_min_train_bev_cells: int,
+    aiqii_min_train_voxels: int,
 ) -> dict[str, object]:
     root = root.resolve()
     points_dir = root / "points"
@@ -104,6 +175,9 @@ def prepare_dataset(
         det3d_infos: list[dict] = []
         all_boxes: list[np.ndarray] = []
         point_counts: list[int] = []
+        skipped_sparse = 0
+        duplicate_boxes_removed = 0
+        skipped_sparse_examples: list[dict[str, object]] = []
 
         for sample_id in ids:
             points_path = points_dir / f"{sample_id}.npy"
@@ -141,6 +215,30 @@ def prepare_dataset(
 
             if not len(boxes):
                 raise ValueError(f"No boxes for {sample_id}")
+            if name == "aiqii":
+                boxes, names, removed = canonical_single_drone_box(boxes, names)
+                duplicate_boxes_removed += removed
+                if split == "train":
+                    points = load_points(lidar_path, point_format)
+                    in_range_points = in_range_point_count(points)
+                    bev_cells = occupied_cells(points, (0.5, 0.5, 16.0))
+                    voxels = occupied_cells(points, (0.5, 0.5, 0.5))
+                    if (
+                        in_range_points < aiqii_min_train_points
+                        or bev_cells < aiqii_min_train_bev_cells
+                        or voxels < aiqii_min_train_voxels
+                    ):
+                        skipped_sparse += 1
+                        if len(skipped_sparse_examples) < 20:
+                            skipped_sparse_examples.append(
+                                {
+                                    "sample_id": sample_id,
+                                    "in_range_points": in_range_points,
+                                    "bev_cells": bev_cells,
+                                    "voxels": voxels,
+                                }
+                            )
+                        continue
 
             annos = {
                 "name": names,
@@ -182,9 +280,13 @@ def prepare_dataset(
 
         boxes_array = np.concatenate(all_boxes, axis=0)
         summary["splits"][split] = {
-            "samples": len(ids),
+            "source_samples": len(ids),
+            "samples": len(pcdet_infos),
             "smoke_samples": len(pcdet_smoke),
             "objects": int(len(boxes_array)),
+            "skipped_sparse_train_samples": skipped_sparse,
+            "duplicate_boxes_removed": duplicate_boxes_removed,
+            "skipped_sparse_examples": skipped_sparse_examples,
             "point_count_min": min(point_counts),
             "point_count_max": max(point_counts),
             "point_count_mean": float(np.mean(point_counts)),
@@ -201,8 +303,16 @@ def prepare_dataset(
 def main() -> None:
     args = parse_args()
     summaries = [
-        prepare_dataset("aiqii", args.aiqii_root, args.smoke_train, args.smoke_val),
-        prepare_dataset("mmaud", args.mmaud_root, args.smoke_train, args.smoke_val),
+        prepare_dataset(
+            "aiqii",
+            args.aiqii_root,
+            args.smoke_train,
+            args.smoke_val,
+            args.aiqii_min_train_points,
+            args.aiqii_min_train_bev_cells,
+            args.aiqii_min_train_voxels,
+        ),
+        prepare_dataset("mmaud", args.mmaud_root, args.smoke_train, args.smoke_val, 0, 0, 0),
     ]
     print(json.dumps(summaries, indent=2))
 

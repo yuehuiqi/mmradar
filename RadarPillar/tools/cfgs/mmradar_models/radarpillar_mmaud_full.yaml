@@ -1,0 +1,42 @@
+_BASE_CONFIG_: tools/cfgs/vod_models/vod_radarpillar_rot.yaml
+
+CLASS_NAMES: ['Drone']
+
+DATA_CONFIG:
+  _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_mmaud_full.yaml
+
+MODEL:
+  VFE:
+    USE_VELOCITY_DECOMPOSITION: False
+    USE_REL_VELOCITY_DECOMPOSITION: False
+    USE_VELOCITY_OFFSET: False
+    USE_REL_VELOCITY_OFFSET: False
+    NUM_FILTERS: [32]
+  DENSE_HEAD:
+    ANCHOR_GENERATOR_CONFIG: [
+      {
+        'class_name': 'Drone',
+        'anchor_sizes': [[0.50, 0.45, 0.20]],
+        'anchor_rotations': [0, 1.57],
+        'anchor_bottom_heights': [-0.10],
+        'align_center': False,
+        'feature_map_stride': 2,
+        'matched_threshold': 0.45,
+        'unmatched_threshold': 0.25
+      }
+    ]
+  POST_PROCESSING:
+    SCORE_THRESH: 0.05
+    EVAL_METRIC: mmradar
+    NMS_CONFIG:
+      MULTI_CLASSES_NMS: False
+      NMS_TYPE: nms_gpu
+      NMS_THRESH: 0.1
+      NMS_PRE_MAXSIZE: 4096
+      NMS_POST_MAXSIZE: 500
+
+OPTIMIZATION:
+  BATCH_SIZE_PER_GPU: 2
+  NUM_EPOCHS: 80
+  LR: 0.003
+  eval_interval: 5

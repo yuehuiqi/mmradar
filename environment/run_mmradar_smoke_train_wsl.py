@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path("/mnt/e/Scholar/mmradarDetect")
 ENV_ROOT = Path("/home/yuehui/miniforge3/envs")
 LOG_ROOT = ROOT / "environment" / "smoke_logs"
+LINUX_BASE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 
 @dataclass(frozen=True)
@@ -76,9 +77,9 @@ EXPERIMENTS = [
     Experiment("InterFusion_mmaud", "pcdet", "InterFusion", "InterFusion", "cfgs/mmradar_models/pointpillar_mmaud_smoke.yaml", "mmaud", "smoke_mmaud_v1"),
     Experiment("PFANet_aiqii", "pcdet", "PFA-NET", "PFANet", "cfgs/mmradar_models/pointpillar_aiqii_smoke.yaml", "aiQiiDataset", "smoke_aiqii_v1"),
     Experiment("PFANet_mmaud", "pcdet", "PFA-NET", "PFANet", "cfgs/mmradar_models/pointpillar_mmaud_smoke.yaml", "mmaud", "smoke_mmaud_v1"),
-    Experiment("DSVT_aiqii", "pcdet", "DSVT", "DSVT", "cfgs/mmradar_models/dsvt_aiqii_smoke.yaml", "aiQiiDataset", "smoke_aiqii_v1"),
+    Experiment("DSVT_aiqii", "pcdet", "DSVT", "DSVT", "cfgs/mmradar_models/dsvt_aiqii_smoke.yaml", "aiQiiDataset", "smoke_aiqii_v1", "2"),
     Experiment("DSVT_mmaud", "pcdet", "DSVT", "DSVT", "cfgs/mmradar_models/dsvt_mmaud_smoke.yaml", "mmaud", "smoke_mmaud_v1", "2"),
-    Experiment("VoxelNeXt_aiqii", "pcdet", "VoxelNeXt", "VoxelNeXt", "cfgs/mmradar_models/voxelnext_aiqii_smoke.yaml", "aiQiiDataset", "smoke_aiqii_v1"),
+    Experiment("VoxelNeXt_aiqii", "pcdet", "VoxelNeXt", "VoxelNeXt", "cfgs/mmradar_models/voxelnext_aiqii_smoke.yaml", "aiQiiDataset", "smoke_aiqii_v1", "2"),
     Experiment("VoxelNeXt_mmaud", "pcdet", "VoxelNeXt", "VoxelNeXt", "cfgs/mmradar_models/voxelnext_mmaud_smoke.yaml", "mmaud", "smoke_mmaud_v1", "2"),
     Experiment("CenterPoint_aiqii", "det3d", "CenterPoint", "CenterPoint", "configs/mmradar/centerpoint_aiqii_smoke.py", "aiQiiDataset", "mmradar_centerpoint_aiqii_smoke"),
     Experiment("CenterPoint_mmaud", "det3d", "CenterPoint", "CenterPoint", "configs/mmradar/centerpoint_mmaud_smoke.py", "mmaud", "mmradar_centerpoint_mmaud_smoke"),
@@ -131,6 +132,7 @@ def main() -> int:
             log.flush()
             exp_env = env.copy()
             exp_env["PYTHONPATH"] = str(exp.project_root) + os.pathsep + exp_env.get("PYTHONPATH", "")
+            exp_env["PATH"] = str(exp.python.parent) + os.pathsep + LINUX_BASE_PATH
             proc = subprocess.run(
                 exp.command(),
                 cwd=str(exp.cwd()),

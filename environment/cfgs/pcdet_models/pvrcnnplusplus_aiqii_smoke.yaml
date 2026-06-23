@@ -1,0 +1,51 @@
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/OpenPCDet/tools/cfgs/kitti_models/pv_rcnn_plusplus_reproduced_by_community.yaml
+
+CLASS_NAMES: ['Drone']
+
+DATA_CONFIG:
+  _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_aiqii_smoke_voxel3d.yaml
+
+MODEL:
+  MAP_TO_BEV:
+    NUM_BEV_FEATURES: 128
+  DENSE_HEAD:
+    CLASS_NAMES_EACH_HEAD: [
+      ['Drone']
+    ]
+    TARGET_ASSIGNER_CONFIG:
+      NUM_MAX_OBJS: 64
+      MIN_RADIUS: 1
+    POST_PROCESSING:
+      POST_CENTER_LIMIT_RANGE: [-16, -20, -8, 64, 20, 8]
+      SCORE_THRESH: 0.05
+      MAX_OBJ_PER_SAMPLE: 100
+      NMS_CONFIG:
+        NMS_TYPE: nms_gpu
+        NMS_THRESH: 0.1
+        NMS_PRE_MAXSIZE: 4096
+        NMS_POST_MAXSIZE: 500
+  PFE:
+    NUM_KEYPOINTS: 512
+    FEATURES_SOURCE: ['bev']
+    SAMPLE_METHOD: FPS
+  POINT_HEAD:
+    TARGET_CONFIG:
+      GT_EXTRA_WIDTH: [0.1, 0.1, 0.1]
+  ROI_HEAD:
+    TARGET_CONFIG:
+      SAMPLE_ROI_BY_EACH_CLASS: False
+      CLS_FG_THRESH: 0.45
+      CLS_BG_THRESH: 0.20
+      CLS_BG_THRESH_LO: 0.05
+      REG_FG_THRESH: 0.35
+  POST_PROCESSING:
+    SCORE_THRESH: 0.05
+    EVAL_METRIC: mmradar
+    NMS_CONFIG:
+      NMS_THRESH: 0.1
+
+OPTIMIZATION:
+  BATCH_SIZE_PER_GPU: 2
+  NUM_EPOCHS: 2
+  LR: 0.003
+  WEIGHT_DECAY: 0.01

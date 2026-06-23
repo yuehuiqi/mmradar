@@ -16,6 +16,7 @@ ROOT = Path("/mnt/e/Scholar/mmradarDetect")
 ENV_ROOT = Path("/home/yuehui/miniforge3/envs")
 RUN_ROOT = ROOT / "environment" / "full_runs"
 TOTAL_EPOCHS = 80
+LINUX_BASE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 
 @dataclass(frozen=True)
@@ -144,13 +145,13 @@ EXPERIMENTS = [
         "DSVT", "pcdet", "DSVT", "DSVT",
         "dsvt_{dataset}_full",
         "cfgs/mmradar_models/dsvt_aiqii_full.yaml",
-        "cfgs/mmradar_models/dsvt_mmaud_full.yaml", 1, 2,
+        "cfgs/mmradar_models/dsvt_mmaud_full.yaml", 2, 2,
     ),
     Experiment(
         "VoxelNeXt", "pcdet", "VoxelNeXt", "VoxelNeXt",
         "voxelnext_{dataset}_full",
         "cfgs/mmradar_models/voxelnext_aiqii_full.yaml",
-        "cfgs/mmradar_models/voxelnext_mmaud_full.yaml", 1, 2,
+        "cfgs/mmradar_models/voxelnext_mmaud_full.yaml", 2, 2,
     ),
     Experiment(
         "CenterPoint", "det3d", "CenterPoint", "CenterPoint", "",
@@ -340,6 +341,8 @@ def main():
             write_json(status_path, statuses)
             print(f"[RUN] {experiment.name} attempt {attempt} -> {log_path}", flush=True)
             started = time.time()
+            experiment_environment = environment.copy()
+            experiment_environment["PATH"] = str(experiment.python.parent) + os.pathsep + LINUX_BASE_PATH
             try:
                 with log_path.open("w", encoding="utf-8", errors="replace") as log:
                     log.write("$ " + " ".join(command) + "\n\n")
@@ -347,7 +350,7 @@ def main():
                     process = subprocess.run(
                         command,
                         cwd=str(experiment.cwd()),
-                        env=environment,
+                        env=experiment_environment,
                         stdout=log,
                         stderr=subprocess.STDOUT,
                         text=True,
