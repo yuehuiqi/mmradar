@@ -11,4 +11,6 @@ data["test"]["info_path"] = val_anno
 data["test"]["ann_file"] = val_anno
 
 total_epochs = 80
+checkpoint_config = dict(interval=10, max_keep_ckpts=10)
+workflow = [("train", 5), ("val", 1)]
 work_dir = "./work_dirs/mmradar_pillarnet_mmaud_full"

@@ -483,8 +483,18 @@ class Trainer(object):
 
         # torch.save(predictions, "final_predictions_debug.pkl")
         # TODO fix evaluation module
-        result_dict, _ = self.data_loader.dataset.evaluation(
+        result_dict, metrics = self.data_loader.dataset.evaluation(
             predictions, output_dir=self.work_dir
+        )
+
+        from mmradar_common.training import record_periodic_metrics
+
+        record_periodic_metrics(
+            self.work_dir,
+            self.epoch,
+            metrics,
+            project=self.model.__class__.__name__,
+            dataset=self.data_loader.dataset.__class__.__name__,
         )
 
         self.logger.info("\n")

@@ -135,7 +135,7 @@ data = dict(
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 optimizer = dict(type="adam", amsgrad=0.0, wd=0.01, fixed_wd=True, moving_average=False)
 lr_config = dict(type="one_cycle", lr_max=0.003, moms=[0.95, 0.85], div_factor=10.0, pct_start=0.4)
-checkpoint_config = dict(interval=1)
+checkpoint_config = dict(interval=1, max_keep_ckpts=10)
 log_config = dict(interval=5, hooks=[dict(type="TextLoggerHook")])
 
 total_epochs = 1
@@ -145,4 +145,4 @@ log_level = "INFO"
 work_dir = "./work_dirs/mmradar_pillarnet_aiqii_smoke"
 load_from = None
 resume_from = None
-workflow = [("train", 1)]
+workflow = [("train", 1), ("val", 1)]

@@ -102,8 +102,18 @@ class MMRadarDet3DDatasetMixin:
         return annotations
 
     def evaluation(self, detections, output_dir=None, testset=False):
+        if not hasattr(self, "_mmradar_infos"):
+            self.load_infos(self._info_path)
+
+        if isinstance(detections, dict):
+            ordered_detections = [
+                detections.get(info["token"], {}) for info in self._mmradar_infos
+            ]
+        else:
+            ordered_detections = list(detections)
+
         det_annos = []
-        for det in detections:
+        for det in ordered_detections:
             boxes = (
                 det.get("boxes_lidar")
                 if isinstance(det, dict)
@@ -119,4 +129,9 @@ class MMRadarDet3DDatasetMixin:
                 }
             )
         metrics = center_distance_metrics(det_annos, self.ground_truth_annotations)
-        return format_metrics(metrics), metrics
+        formatted = format_metrics(metrics)
+        result_dict = {
+            "results": {"mmradar": formatted},
+            "detail": {"mmradar": metrics},
+        }
+        return result_dict, metrics

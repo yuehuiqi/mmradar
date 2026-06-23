@@ -17,9 +17,18 @@ logs/
 tensorboard/
 *.log
 events.out.tfevents*
+*.pth
+*.pt
+*.ckpt
+
+# Generated datasets/metadata
+*.npy
+*.npz
+*.pkl
 
 # Local smoke/run artifacts
 environment/smoke_logs/
+environment/full_runs/
 
 # Editor/OS noise
 .vscode/

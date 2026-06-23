@@ -198,7 +198,18 @@ def main():
 
     save_pred(predictions, args.work_dir)
 
-    result_dict, _ = dataset.evaluation(copy.deepcopy(predictions), output_dir=args.work_dir, testset=args.testset)
+    result_dict, metrics = dataset.evaluation(copy.deepcopy(predictions), output_dir=args.work_dir, testset=args.testset)
+
+    from mmradar_common.training import record_periodic_metrics
+
+    checkpoint_epoch = checkpoint.get("meta", {}).get("epoch", cfg.total_epochs)
+    record_periodic_metrics(
+        args.work_dir,
+        checkpoint_epoch,
+        metrics,
+        project=model.__class__.__name__,
+        dataset=dataset.__class__.__name__,
+    )
 
     if result_dict is not None:
         for k, v in result_dict["results"].items():
