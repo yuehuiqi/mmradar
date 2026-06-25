@@ -10,31 +10,31 @@
 
 先说结果。机器与软件栈如下：
 
-| 项目 | 实际配置 |
-|---|---|
-| 操作系统 | Windows + WSL2，Ubuntu 24.04.4 LTS |
-| GPU | NVIDIA GeForce RTX 5070 Ti Laptop GPU |
-| 显存 | 12227 MiB |
-| 驱动 | 595.79 |
-| Compute Capability | 12.0，也就是 `sm_120` |
-| Python | 3.10 |
-| PyTorch | 2.7.1+cu128 |
-| CUDA Runtime | 12.8 |
-| CUDA Toolkit / nvcc | 12.8，V12.8.93 |
-| spconv | 2.3.6，安装包为 `spconv-cu120` |
-| NumPy / Numba | 1.23.5 / 0.57.1 |
+| 项目                | 实际配置                              |
+| ------------------- | ------------------------------------- |
+| 操作系统            | Windows + WSL2，Ubuntu 24.04.4 LTS    |
+| GPU                 | NVIDIA GeForce RTX 5070 Ti Laptop GPU |
+| 显存                | 12227 MiB                             |
+| 驱动                | 595.79                                |
+| Compute Capability  | 12.0，也就是`sm_120`                |
+| Python              | 3.10                                  |
+| PyTorch             | 2.7.1+cu128                           |
+| CUDA Runtime        | 12.8                                  |
+| CUDA Toolkit / nvcc | 12.8，V12.8.93                        |
+| spconv              | 2.3.6，安装包为`spconv-cu120`       |
+| NumPy / Numba       | 1.23.5 / 0.57.1                       |
 
 七个项目各自使用一个 WSL conda 环境：
 
-| 源码项目 | 环境名 | 备注 |
-|---|---|---|
-| OpenPCDet | `PointPillar` | Windows 侧已经有一个 `openpcdet`，因此换名，避免混淆 |
-| CenterPoint | `CenterPoint` | Det3D 体系 |
-| PillarNet-LTS | `PillarNetLTS` | 去掉连字符，按驼峰命名 |
-| DSVT | `DSVT` | 动态 pillar 与 transformer 主干 |
-| InterFusion | `InterFusion` | 较老的 PCDet 分支，兼容工作较多 |
-| PFA-NET | `PFANet` | 较老的 PCDet 分支 |
-| VoxelNeXt | `VoxelNeXt` | 3D 稀疏卷积主干 |
+| 源码项目      | 环境名           | 备注                                                  |
+| ------------- | ---------------- | ----------------------------------------------------- |
+| OpenPCDet     | `PointPillar`  | Windows 侧已经有一个`openpcdet`，因此换名，避免混淆 |
+| CenterPoint   | `CenterPoint`  | Det3D 体系                                            |
+| PillarNet-LTS | `PillarNetLTS` | 去掉连字符，按驼峰命名                                |
+| DSVT          | `DSVT`         | 动态 pillar 与 transformer 主干                       |
+| InterFusion   | `InterFusion`  | 较老的 PCDet 分支，兼容工作较多                       |
+| PFA-NET       | `PFANet`       | 较老的 PCDet 分支                                     |
+| VoxelNeXt     | `VoxelNeXt`    | 3D 稀疏卷积主干                                       |
 
 这里有一个很重要的边界：Windows 里原来已有的 `CCF`、`TXGH`、`chatapi`、`meditune`、`openpcdet` 和 `base` 环境没有被改动。新环境全部建在 WSL 的 Miniforge 下，路径统一为：
 
@@ -44,22 +44,22 @@
 
 最终完成了 14 次 smoke 实验，每次至少跑完 1 个 epoch。当前版本中 PCDet 与 Det3D 两类项目都会在 smoke 最终 epoch 后执行验证：
 
-| 实验 | 状态 | 用时 |
-|---|---:|---:|
-| OpenPCDet + aiQiiDataset | OK | 23.92 s |
-| OpenPCDet + MMAUD | OK | 24.08 s |
-| InterFusion + aiQiiDataset | OK | 20.59 s |
-| InterFusion + MMAUD | OK | 21.40 s |
-| PFA-NET + aiQiiDataset | OK | 21.93 s |
-| PFA-NET + MMAUD | OK | 18.56 s |
-| DSVT + aiQiiDataset | OK | 23.37 s |
-| DSVT + MMAUD | OK | 25.33 s |
-| VoxelNeXt + aiQiiDataset | OK | 32.77 s |
-| VoxelNeXt + MMAUD | OK | 22.43 s |
-| CenterPoint + aiQiiDataset | OK | 21.42 s |
-| CenterPoint + MMAUD | OK | 16.53 s |
-| PillarNet-LTS + aiQiiDataset | OK | 39.08 s |
-| PillarNet-LTS + MMAUD | OK | 33.60 s |
+| 实验                         | 状态 |    用时 |
+| ---------------------------- | ---: | ------: |
+| OpenPCDet + aiQiiDataset     |   OK | 23.92 s |
+| OpenPCDet + MMAUD            |   OK | 24.08 s |
+| InterFusion + aiQiiDataset   |   OK | 20.59 s |
+| InterFusion + MMAUD          |   OK | 21.40 s |
+| PFA-NET + aiQiiDataset       |   OK | 21.93 s |
+| PFA-NET + MMAUD              |   OK | 18.56 s |
+| DSVT + aiQiiDataset          |   OK | 23.37 s |
+| DSVT + MMAUD                 |   OK | 25.33 s |
+| VoxelNeXt + aiQiiDataset     |   OK | 32.77 s |
+| VoxelNeXt + MMAUD            |   OK | 22.43 s |
+| CenterPoint + aiQiiDataset   |   OK | 21.42 s |
+| CenterPoint + MMAUD          |   OK | 16.53 s |
+| PillarNet-LTS + aiQiiDataset |   OK | 39.08 s |
+| PillarNet-LTS + MMAUD        |   OK | 33.60 s |
 
 这些数字只是通路测试耗时，不是性能 benchmark。smoke 的意义是确认数据读取、预处理、前向、反向、loss、CUDA 算子、checkpoint 和评估都能走完。只训练一个 epoch 时，零召回、较大的定位损失或者指标波动都不值得过度解读；真正值得警惕的是 `NaN`、维度突变、CUDA illegal memory access、保存后无法加载，以及训练与验证坐标系不一致。
 
@@ -254,10 +254,10 @@ InterFusion 与 PFA-NET 的 PointNet2 C++ 源码引用了已经退出当前 PyTo
 
 但它们的数据规模、点云稀疏度、文件格式、坐标定义和目标框尺寸差异很大。
 
-| 数据集 | train | val | train 平均点数 | val 平均点数 | 点云格式 |
-|---|---:|---:|---:|---:|---|
-| aiQiiDataset | 13200 | 2560 | 123.55 | 116.92 | 元数据可对应 `.bin`，同时保留 `.npy` |
-| MMAUD | 3834 | 185 | 19.96 | 13.42 | `.npy` |
+| 数据集       | train |  val | train 平均点数 | val 平均点数 | 点云格式                                |
+| ------------ | ----: | ---: | -------------: | -----------: | --------------------------------------- |
+| aiQiiDataset | 13200 | 2560 |         123.55 |       116.92 | 元数据可对应`.bin`，同时保留 `.npy` |
+| MMAUD        |  3834 |  185 |          19.96 |        13.42 | `.npy`                                |
 
 aiQiiDataset 训练帧最少 3 个点，最多 649 个点；MMAUD 训练帧最少只有 1 个点，最多 169 个点。MMAUD 验证集平均一帧只有约 13 个点。这种差距会直接触发很多“在激光雷达数据上永远遇不到”的边界条件，例如一批数据里只有一个非空 voxel，或者某个 batch 中不同样本可供 top-k 的候选数量不一样。
 

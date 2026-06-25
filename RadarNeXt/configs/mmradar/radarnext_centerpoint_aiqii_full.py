@@ -1,5 +1,6 @@
 _base_ = './radarnext_centerpoint_aiqii_smoke.py'
 
+data_root = '/mnt/e/Scholar/dataset/aiQiiDataset/radar_openpcdet'
 train_ann = data_root + '/mmradar_det3d_infos_train.pkl'
 val_ann = data_root + '/mmradar_det3d_infos_val.pkl'
 

@@ -25,6 +25,30 @@ def _scores(annotation, count):
     return scores
 
 
+def _names(annotation, count):
+    value = annotation.get("name", annotation.get("names", []))
+    names = np.asarray(value).astype(str).reshape(-1)
+    if len(names) != count:
+        return np.full((count,), "", dtype="<U1")
+    return names
+
+
+def _filter_annotation_by_name(annotation, class_name, prediction):
+    boxes = _boxes(annotation)
+    names = _names(annotation, len(boxes))
+    mask = names == class_name
+    filtered = {
+        "name": names[mask],
+        "boxes_lidar": boxes[mask],
+        "gt_boxes_lidar": boxes[mask],
+        "gt_boxes": boxes[mask],
+    }
+    if prediction:
+        scores = _scores(annotation, len(boxes))
+        filtered["score"] = scores[mask]
+    return filtered
+
+
 def _rectangle_corners(box):
     half_x, half_y = max(float(box[3]), 0.0) / 2, max(float(box[4]), 0.0) / 2
     corners = np.asarray(
@@ -304,9 +328,34 @@ def comprehensive_detection_metrics(
 
 def center_distance_metrics(det_annos, gt_annos, thresholds=CENTER_THRESHOLDS):
     """Backward-compatible entry point returning the full MMRadar metric set."""
-    return comprehensive_detection_metrics(
+    metrics = comprehensive_detection_metrics(
         det_annos, gt_annos, center_thresholds=thresholds
     )
+    gt_class_names = []
+    for gt in gt_annos:
+        boxes = _boxes(gt)
+        for name in _names(gt, len(boxes)):
+            if name and name not in gt_class_names:
+                gt_class_names.append(str(name))
+
+    if len(gt_class_names) > 1:
+        for class_name in gt_class_names:
+            class_det_annos = [
+                _filter_annotation_by_name(det, class_name, prediction=True)
+                for det in det_annos
+            ]
+            class_gt_annos = [
+                _filter_annotation_by_name(gt, class_name, prediction=False)
+                for gt in gt_annos
+            ]
+            class_metrics = comprehensive_detection_metrics(
+                class_det_annos,
+                class_gt_annos,
+                center_thresholds=thresholds,
+            )
+            for key, value in class_metrics.items():
+                metrics[f"class/{class_name}/{key}"] = value
+    return metrics
 
 
 def format_metrics(metrics):
@@ -333,4 +382,18 @@ def format_metrics(metrics):
                 f"F1={metrics[f'{prefix}_iou_f1_{label}']:.4f}, "
                 f"AP={metrics[f'{prefix}_iou_ap_{label}']:.4f}"
             )
+    class_names = []
+    for key in metrics:
+        if key.startswith("class/"):
+            parts = key.split("/", 2)
+            if len(parts) >= 3 and parts[1] not in class_names:
+                class_names.append(parts[1])
+    for class_name in class_names:
+        prefix = f"class/{class_name}/"
+        lines.append(f"Class {class_name}:")
+        lines.append(
+            f"  Center@2m AP={metrics.get(prefix + 'center_ap_2m', 0.0):.4f}, "
+            f"3D IoU@0.25 AP={metrics.get(prefix + '3d_iou_ap_0.25', 0.0):.4f}, "
+            f"mean center distance={metrics.get(prefix + 'mean_best_center_distance', float('inf')):.4f} m"
+        )
     return "\n".join(lines)

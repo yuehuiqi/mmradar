@@ -1,8 +1,8 @@
-_base_ = './radarnext_centerpoint_mmaud_smoke.py'
+_base_ = './radarnext_centerpoint_aiqii_multiclass_smoke.py'
 
-data_root = '/mnt/e/Scholar/dataset/mmaud/mmaud_radar_camera_openpcdet'
-train_ann = data_root + '/mmradar_det3d_infos_train.pkl'
-val_ann = data_root + '/mmradar_det3d_infos_val.pkl'
+data_root = '/mnt/e/Scholar/dataset/aiQiiDataset/radar_openpcdet'
+train_ann = data_root + '/mmradar_det3d_infos_train_multiclass.pkl'
+val_ann = data_root + '/mmradar_det3d_infos_val_multiclass.pkl'
 
 train_dataloader = dict(
     batch_size=4,
@@ -15,4 +15,4 @@ test_evaluator = val_evaluator
 
 train_cfg = dict(max_epochs=80, val_interval=5)
 default_hooks = dict(checkpoint=dict(interval=5, max_keep_ckpts=10))
-work_dir = './work_dirs/radarnext_centerpoint_mmaud_full'
+work_dir = './work_dirs/radarnext_centerpoint_aiqii_multiclass_full'

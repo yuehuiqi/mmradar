@@ -1,0 +1,9 @@
+_BASE_CONFIG_: tools/cfgs/mmradar_models/radarpillar_aiqii_multiclass_smoke.yaml
+
+DATA_CONFIG:
+  _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_aiqii_multiclass_full.yaml
+
+OPTIMIZATION:
+  NUM_EPOCHS: 80
+  eval_interval: 5
+

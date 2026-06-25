@@ -19,7 +19,7 @@ from .det3d_dataset import Det3DDataset
 
 @DATASETS.register_module()
 class MMRadarDataset(Det3DDataset):
-    """Single-class millimeter-wave radar dataset for aiQiiDataset/MMAUD.
+    """Millimeter-wave radar dataset adapter for aiQiiDataset/MMAUD.
 
     The converter in ``environment/prepare_mmradar_datasets.py`` writes a
     compact list of samples with absolute point-cloud paths and OpenPCDet-style
@@ -28,14 +28,24 @@ class MMRadarDataset(Det3DDataset):
     """
 
     METAINFO = {
-        'classes': ('Drone', ),
-        'palette': [(255, 77, 77)],
+        # ``Det3DDataset`` first maps labels from this original class table to
+        # the classes requested by the config.  Keep both aiQii modes here:
+        # single-class uses ``Drone``; four-class aiQii uses the drone model
+        # names below.
+        'classes': ('Drone', 'Air3S', 'Mini4pro', 'Mavic3Pro', 'jingling4'),
+        'palette': [
+            (255, 77, 77),
+            (64, 160, 255),
+            (255, 190, 64),
+            (120, 220, 120),
+            (190, 120, 255),
+        ],
     }
 
     def load_data_list(self) -> List[dict]:
         raw_infos = mmengine.load(self.ann_file, backend_args=self.backend_args)
         data_list = []
-        classes = self.metainfo['classes']
+        raw_classes = self.METAINFO['classes']
 
         for sample_idx, info in enumerate(raw_infos):
             boxes = np.asarray(info.get('gt_boxes', []), dtype=np.float32).reshape(-1, 7)
@@ -43,7 +53,9 @@ class MMRadarDataset(Det3DDataset):
 
             instances = []
             for box, name in zip(boxes, names):
-                label = classes.index(str(name)) if str(name) in classes else -1
+                # Store the original label; the parent dataset remaps it to
+                # the config's class order in ``parse_ann_info``.
+                label = raw_classes.index(str(name)) if str(name) in raw_classes else -1
                 instances.append({
                     'bbox_3d': box.tolist(),
                     'bbox_label_3d': label,

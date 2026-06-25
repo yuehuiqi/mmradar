@@ -1,0 +1,7 @@
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_aiqii_multiclass_smoke.yaml
+
+INFO_PATH: {
+  'train': [mmradar_infos_train_multiclass.pkl],
+  'test': [mmradar_infos_val_multiclass.pkl],
+}
+

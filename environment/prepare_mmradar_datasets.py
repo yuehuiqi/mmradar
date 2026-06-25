@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Build normalized single-class metadata for all mmradarDetect projects."""
+"""Build normalized metadata for all mmradarDetect projects.
+
+The default ``mmradar_infos_*.pkl`` / ``mmradar_det3d_infos_*.pkl`` files are
+single-class metadata where every UAV is normalized to ``Drone``.  For aiQii we
+also emit ``*_multiclass*.pkl`` files that keep the original four UAV labels
+while using the same sparse-frame filtering rules as the single-class training
+set.
+"""
 
 from __future__ import annotations
 
@@ -146,6 +153,18 @@ def canonical_single_drone_box(boxes: np.ndarray, names: np.ndarray) -> tuple[np
     return box, np.asarray(["Drone"], dtype="<U5"), int(len(boxes) - 1)
 
 
+def canonical_single_class_box(boxes: np.ndarray, names: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
+    """Merge rare duplicate aiQii boxes while preserving the UAV model label."""
+
+    if len(boxes) <= 1:
+        return boxes, names, 0
+    box = np.median(boxes.astype(np.float32), axis=0, keepdims=True).astype(np.float32)
+    box[:, 6] = 0.0
+    unique_names, counts = np.unique(names.astype(str), return_counts=True)
+    kept_name = unique_names[int(np.argmax(counts))] if len(unique_names) else "Drone"
+    return box, np.asarray([kept_name], dtype=f"<U{max(len(kept_name), 1)}"), int(len(boxes) - 1)
+
+
 def prepare_dataset(
     name: str,
     root: Path,
@@ -173,6 +192,8 @@ def prepare_dataset(
             }
         pcdet_infos: list[dict] = []
         det3d_infos: list[dict] = []
+        pcdet_multiclass_infos: list[dict] = []
+        det3d_multiclass_infos: list[dict] = []
         all_boxes: list[np.ndarray] = []
         point_counts: list[int] = []
         skipped_sparse = 0
@@ -188,7 +209,9 @@ def prepare_dataset(
             if sample_id in source_infos_by_id:
                 source_info = source_infos_by_id[sample_id]
                 boxes = np.asarray(source_info["annos"]["gt_boxes_lidar"], dtype=np.float32)
+                source_names = np.asarray(source_info["annos"]["name"])
                 names = np.full((len(boxes),), "Drone", dtype="<U5")
+                multiclass_names = source_names.astype(str)
                 point_count = int(source_info["point_cloud"].get("num_points", -1))
                 lidar_path = points_bin_dir / f"{sample_id}.bin"
                 if not lidar_path.is_file():
@@ -197,6 +220,7 @@ def prepare_dataset(
                 coordinate_transform = None
             else:
                 boxes, names = read_labels(label_path)
+                multiclass_names = names.copy()
                 point_count = count_npy_points(points_path)
                 # MMAUD publishes camera-style coordinates: x-right, y-down, z-forward.
                 # Convert both points and boxes to x-forward, y-left, z-up at load time.
@@ -215,9 +239,14 @@ def prepare_dataset(
 
             if not len(boxes):
                 raise ValueError(f"No boxes for {sample_id}")
+            multiclass_boxes = boxes.copy()
             if name == "aiqii":
                 boxes, names, removed = canonical_single_drone_box(boxes, names)
                 duplicate_boxes_removed += removed
+                multiclass_boxes, multiclass_names, _ = canonical_single_class_box(
+                    multiclass_boxes,
+                    multiclass_names,
+                )
                 if split == "train":
                     points = load_points(lidar_path, point_format)
                     in_range_points = in_range_point_count(points)
@@ -266,6 +295,33 @@ def prepare_dataset(
                     "gt_names": names,
                 }
             )
+            if name == "aiqii":
+                multiclass_annos = {
+                    "name": multiclass_names,
+                    "gt_boxes_lidar": multiclass_boxes,
+                    "num_points_in_gt": np.full((len(multiclass_boxes),), -1, dtype=np.int32),
+                }
+                pcdet_multiclass_infos.append(
+                    {
+                        "point_cloud": {
+                            "num_features": 4,
+                            "lidar_idx": sample_id,
+                            "num_points": point_count,
+                        },
+                        "annos": multiclass_annos,
+                    }
+                )
+                det3d_multiclass_infos.append(
+                    {
+                        "token": sample_id,
+                        "lidar_path": str(lidar_path),
+                        "point_format": point_format,
+                        "coordinate_transform": coordinate_transform,
+                        "sweeps": [],
+                        "gt_boxes": multiclass_boxes,
+                        "gt_names": multiclass_names,
+                    }
+                )
             all_boxes.append(boxes)
             point_counts.append(point_count)
 
@@ -277,6 +333,13 @@ def prepare_dataset(
         write_pickle(root / f"mmradar_infos_{split}_smoke.pkl", pcdet_smoke)
         write_pickle(root / f"mmradar_det3d_infos_{split}.pkl", det3d_infos)
         write_pickle(root / f"mmradar_det3d_infos_{split}_smoke.pkl", det3d_smoke)
+        if name == "aiqii":
+            pcdet_multiclass_smoke = spread_subset(pcdet_multiclass_infos, smoke_count)
+            det3d_multiclass_smoke = spread_subset(det3d_multiclass_infos, smoke_count)
+            write_pickle(root / f"mmradar_infos_{split}_multiclass.pkl", pcdet_multiclass_infos)
+            write_pickle(root / f"mmradar_infos_{split}_multiclass_smoke.pkl", pcdet_multiclass_smoke)
+            write_pickle(root / f"mmradar_det3d_infos_{split}_multiclass.pkl", det3d_multiclass_infos)
+            write_pickle(root / f"mmradar_det3d_infos_{split}_multiclass_smoke.pkl", det3d_multiclass_smoke)
 
         boxes_array = np.concatenate(all_boxes, axis=0)
         summary["splits"][split] = {
@@ -294,6 +357,13 @@ def prepare_dataset(
             "box_center_max": boxes_array[:, :3].max(axis=0).tolist(),
             "box_size_mean": boxes_array[:, 3:6].mean(axis=0).tolist(),
         }
+        if name == "aiqii":
+            multiclass_counts: dict[str, int] = {}
+            for info in pcdet_multiclass_infos:
+                for label in info["annos"]["name"]:
+                    multiclass_counts[str(label)] = multiclass_counts.get(str(label), 0) + 1
+            summary["splits"][split]["multiclass_samples"] = len(pcdet_multiclass_infos)
+            summary["splits"][split]["multiclass_objects_by_class"] = multiclass_counts
 
     summary_path = root / "mmradar_prepare_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")

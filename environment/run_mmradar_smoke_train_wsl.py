@@ -36,31 +36,60 @@ class Experiment:
     def python(self) -> Path:
         return ENV_ROOT / self.env / "bin" / "python"
 
-    def command(self) -> list[str]:
+    def resolved_cfg(self, aiqii_classes: str) -> str:
+        if aiqii_classes == "multiclass" and "_aiqii_" in self.cfg:
+            return self.cfg.replace("_aiqii_", "_aiqii_multiclass_")
+        return self.cfg
+
+    def resolved_tag(self, aiqii_classes: str) -> str:
+        if aiqii_classes == "multiclass" and "aiqii" in self.extra_tag:
+            return self.extra_tag.replace("aiqii", "aiqii_multiclass")
+        return self.extra_tag
+
+    def effective_batch_size(self, batch_size=None, pcdet_batch_size=None, det3d_batch_size=None) -> str:
+        override = pcdet_batch_size if self.kind == "pcdet" else det3d_batch_size
+        if override is None:
+            override = batch_size
+        return str(override if override is not None else self.batch_size)
+
+    def command(self, args=None, run_dir: Path | None = None) -> list[str]:
+        aiqii_classes = getattr(args, "aiqii_classes", "single") if args else "single"
+        cfg = self.resolved_cfg(aiqii_classes)
+        extra_tag = self.resolved_tag(aiqii_classes)
+        effective_batch = self.effective_batch_size(
+            getattr(args, "batch_size", None) if args else None,
+            getattr(args, "pcdet_batch_size", None) if args else None,
+            getattr(args, "det3d_batch_size", None) if args else None,
+        )
         if self.kind == "pcdet":
             return [
                 str(self.python),
                 "train.py",
                 "--cfg_file",
-                self.cfg,
+                cfg,
                 "--epochs",
                 "1",
                 "--workers",
                 "0",
                 "--batch_size",
-                self.batch_size,
+                effective_batch,
                 "--extra_tag",
-                self.extra_tag,
+                extra_tag,
                 "--max_waiting_mins",
                 "0",
             ]
         if self.kind == "det3d":
+            if run_dir is not None and (
+                getattr(args, "batch_size", None) is not None
+                or getattr(args, "det3d_batch_size", None) is not None
+            ):
+                cfg = make_det3d_batch_config(self, cfg, run_dir, extra_tag, effective_batch)
             return [
                 str(self.python),
                 "tools/train.py",
-                self.cfg,
+                cfg,
                 "--work_dir",
-                f"work_dirs/{self.extra_tag}",
+                f"work_dirs/{extra_tag}",
                 "--gpus",
                 "1",
             ]
@@ -88,10 +117,43 @@ EXPERIMENTS = [
 ]
 
 
+def make_det3d_batch_config(exp: Experiment, cfg: str, run_dir: Path, extra_tag: str, batch_size: str) -> str:
+    config_path = Path(cfg)
+    module_dir = exp.project_root / config_path.parent
+    module_name = config_path.stem
+    generated_dir = run_dir / "generated_configs"
+    generated_dir.mkdir(parents=True, exist_ok=True)
+    generated = generated_dir / f"{exp.name}_{extra_tag}_batch{batch_size}.py"
+    generated.write_text(
+        "\n".join(
+            [
+                "import sys",
+                f"sys.path.insert(0, {str(module_dir)!r})",
+                f"from {module_name} import *  # noqa: F401,F403",
+                "",
+                f"data['samples_per_gpu'] = {int(batch_size)}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return str(generated)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--aiqii-classes",
+        default="single",
+        choices=("single", "multiclass"),
+        help="aiQii class mode for aiqii smoke experiments.",
+    )
+    parser.add_argument("--batch-size", type=int, default=None, help="Override every smoke experiment's train batch size.")
+    parser.add_argument("--pcdet-batch-size", type=int, default=None, help="Override OpenPCDet-style smoke batch size.")
+    parser.add_argument("--det3d-batch-size", type=int, default=None, help="Override CenterPoint/PillarNet-LTS smoke batch size.")
     parser.add_argument("--only", nargs="*", default=None, help="Run only these experiment names.")
     parser.add_argument("--skip", nargs="*", default=[], help="Skip these experiment names.")
+    parser.add_argument("--dry-run", action="store_true", help="Print selected smoke commands without running them.")
     return parser.parse_args()
 
 
@@ -122,19 +184,26 @@ def main() -> int:
     env.setdefault("CUDA_VISIBLE_DEVICES", "0")
     results = []
 
+    if args.dry_run:
+        for exp in selected:
+            print(f"[DRY] {exp.name}: cwd={exp.cwd()}")
+            print("      " + " ".join(exp.command(args, run_dir)))
+        return 0
+
     for exp in selected:
         log_path = run_dir / f"{exp.name}.log"
         started = time.time()
         print(f"[RUN] {exp.name} -> {log_path}", flush=True)
         with log_path.open("w", encoding="utf-8", errors="replace") as log:
-            log.write("$ " + " ".join(exp.command()) + "\n")
+            command = exp.command(args, run_dir)
+            log.write("$ " + " ".join(command) + "\n")
             log.write(f"# cwd={exp.cwd()}\n\n")
             log.flush()
             exp_env = env.copy()
             exp_env["PYTHONPATH"] = str(exp.project_root) + os.pathsep + exp_env.get("PYTHONPATH", "")
             exp_env["PATH"] = str(exp.python.parent) + os.pathsep + LINUX_BASE_PATH
             proc = subprocess.run(
-                exp.command(),
+                command,
                 cwd=str(exp.cwd()),
                 env=exp_env,
                 stdout=log,

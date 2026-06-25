@@ -1,0 +1,18 @@
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_aiqii_multiclass_full.yaml
+
+DATA_PROCESSOR:
+  - NAME: mask_points_and_boxes_outside_range
+    REMOVE_OUTSIDE_BOXES: True
+  - NAME: shuffle_points
+    SHUFFLE_ENABLED: {
+      'train': True,
+      'test': False
+    }
+  - NAME: transform_points_to_voxels
+    VOXEL_SIZE: [0.5, 0.5, 0.5]
+    MAX_POINTS_PER_VOXEL: 8
+    MAX_NUMBER_OF_VOXELS: {
+      'train': 12000,
+      'test': 20000
+    }
+

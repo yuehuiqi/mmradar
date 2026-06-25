@@ -122,10 +122,22 @@ class MMRadarDet3DDatasetMixin:
             if boxes is None and isinstance(det, dict):
                 boxes = det.get("box3d_lidar", det.get("boxes", det.get("box3d_lidar_preds")))
             scores = det.get("score", det.get("scores", det.get("scores_lidar"))) if isinstance(det, dict) else None
+            labels = det.get("label_preds", det.get("labels", det.get("labels_3d"))) if isinstance(det, dict) else None
+            label_array = _to_numpy(labels).reshape(-1).astype(np.int64)
+            class_names = np.asarray(self._class_names)
+            names = np.asarray([], dtype="<U1")
+            if len(label_array):
+                names = np.asarray(
+                    [
+                        str(class_names[label]) if 0 <= label < len(class_names) else str(label)
+                        for label in label_array
+                    ]
+                )
             det_annos.append(
                 {
                     "boxes_lidar": _to_numpy(boxes).reshape(-1, 7),
                     "score": _to_numpy(scores).reshape(-1),
+                    "name": names,
                 }
             )
         metrics = center_distance_metrics(det_annos, self.ground_truth_annotations)

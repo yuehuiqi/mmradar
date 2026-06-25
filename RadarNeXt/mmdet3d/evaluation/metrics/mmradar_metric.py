@@ -58,6 +58,7 @@ class MMRadarMetric(BaseMetric):
 
     def compute_metrics(self, results: List[dict]) -> Dict[str, float]:
         infos = mmengine.load(self.ann_file, backend_args=self.backend_args)
+        class_names = tuple((self.dataset_meta or {}).get('classes', ('Drone', )))
         gt_annos = []
         for info in infos:
             boxes = np.asarray(info.get('gt_boxes', []), dtype=np.float32).reshape(-1, 7)
@@ -69,9 +70,15 @@ class MMRadarMetric(BaseMetric):
 
         det_annos = []
         for result in sorted(results, key=lambda item: item['sample_idx']):
+            labels = np.asarray(result.get('label_preds', []), dtype=np.int64).reshape(-1)
+            names = np.asarray([
+                str(class_names[label]) if 0 <= label < len(class_names) else str(label)
+                for label in labels
+            ])
             det_annos.append({
                 'boxes_lidar': np.asarray(result['boxes_lidar'], dtype=np.float32).reshape(-1, 7),
                 'score': np.asarray(result['score'], dtype=np.float32).reshape(-1),
+                'name': names,
             })
 
         metrics = center_distance_metrics(det_annos, gt_annos)

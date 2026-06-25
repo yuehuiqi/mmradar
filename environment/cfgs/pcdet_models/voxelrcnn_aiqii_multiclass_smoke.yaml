@@ -1,0 +1,16 @@
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/voxelrcnn_aiqii_smoke.yaml
+
+CLASS_NAMES: ['Air3S', 'Mini4pro', 'Mavic3Pro', 'jingling4']
+
+DATA_CONFIG:
+  _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_aiqii_multiclass_smoke_voxel3d.yaml
+
+MODEL:
+  DENSE_HEAD:
+    ANCHOR_GENERATOR_CONFIG: [
+      {'class_name': 'Air3S', 'anchor_sizes': [[0.50, 0.42, 0.14]], 'anchor_rotations': [0, 1.57], 'anchor_bottom_heights': [-0.07], 'align_center': False, 'feature_map_stride': 8, 'matched_threshold': 0.35, 'unmatched_threshold': 0.15},
+      {'class_name': 'Mini4pro', 'anchor_sizes': [[0.30, 0.30, 0.12]], 'anchor_rotations': [0, 1.57], 'anchor_bottom_heights': [-0.06], 'align_center': False, 'feature_map_stride': 8, 'matched_threshold': 0.35, 'unmatched_threshold': 0.15},
+      {'class_name': 'Mavic3Pro', 'anchor_sizes': [[0.50, 0.48, 0.14]], 'anchor_rotations': [0, 1.57], 'anchor_bottom_heights': [-0.07], 'align_center': False, 'feature_map_stride': 8, 'matched_threshold': 0.35, 'unmatched_threshold': 0.15},
+      {'class_name': 'jingling4', 'anchor_sizes': [[0.50, 0.50, 0.30]], 'anchor_rotations': [0, 1.57], 'anchor_bottom_heights': [-0.15], 'align_center': False, 'feature_map_stride': 8, 'matched_threshold': 0.35, 'unmatched_threshold': 0.15}
+    ]
+
