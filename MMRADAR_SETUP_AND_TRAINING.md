@@ -1,5 +1,57 @@
 # MMRadarDetect 环境配置与训练说明
 
+## 2026-06-26 最新推荐训练命令
+
+优先使用本节命令；后面较早的示例属于历史记录，可能还保留旧的 batch/checkpoint 写法。
+
+当前批量脚本默认用 `center_ap_2m` 选择 best validation epoch，正式训练每 5 epoch 保存/验证一次，训练成功后只保留 best 和 last checkpoint。
+
+### 一次跑 14 个模型
+
+aiQii 单类 Drone：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- python3 /mnt/e/Scholar/mmradarDetect/environment/run_mmradar_all14_wsl.py `
+  --config aiqii_single --run-tag aiqii_single_all14_v1 `
+  --batch-size 2 --radarnext-batch-size 1 --retries 2
+```
+
+aiQii 四分类：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- python3 /mnt/e/Scholar/mmradarDetect/environment/run_mmradar_all14_wsl.py `
+  --config aiqii_multiclass --run-tag aiqii_mc_all14_v1 `
+  --batch-size 2 --radarnext-batch-size 1 --retries 2
+```
+
+MMAUD 单类 Drone：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- python3 /mnt/e/Scholar/mmradarDetect/environment/run_mmradar_all14_wsl.py `
+  --config mmaud --run-tag mmaud_all14_v1 `
+  --batch-size 2 --radarnext-batch-size 1 --retries 2
+```
+
+### 分开跑
+
+原始 7 个模型：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- python3 /mnt/e/Scholar/mmradarDetect/environment/run_mmradar_full_suite_wsl.py `
+  --dataset mmaud --run-tag mmaud_v1 `
+  --workers 4 --batch-size 2 --retries 2
+```
+
+扩展 7 个模型：
+
+```powershell
+wsl.exe -d Ubuntu-24.04 -- python3 /mnt/e/Scholar/mmradarDetect/environment/run_mmradar_extended_suite_wsl.py `
+  --dataset mmaud --run-tag mmaud_ext_v1 --mode full `
+  --workers 4 --batch-size 2 --radarnext-batch-size 1 --retries 2
+```
+
+如果想改 best checkpoint 的选择标准，可以额外加例如 `--best-metric 3d_iou_ap_0.25`；不加时默认是 `center_ap_2m`。
+
 更新时间：2026-06-24
 
 ## 1. 当前机器与基础环境

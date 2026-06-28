@@ -6,8 +6,11 @@ DATA_CONFIG:
   _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_aiqii_smoke_voxel3d.yaml
 
 MODEL:
+  BACKBONE_3D:
+    last_pad: 1
   MAP_TO_BEV:
     NUM_BEV_FEATURES: 128
+    REDUCE_Z: max
   DENSE_HEAD:
     ANCHOR_GENERATOR_CONFIG: [
       {

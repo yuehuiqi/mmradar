@@ -1,0 +1,7 @@
+# PFA-Net (RPFA-Net), MMAUD full: PointPillars pipeline + self-attention pillar encoder.
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/pointpillar_mmaud_full.yaml
+
+MODEL:
+  VFE:
+    NAME: RadarPillarFeatureAttention
+    NUM_HEADS: 2

@@ -19,6 +19,8 @@ class ResidualCoder(object):
         Returns:
 
         """
+        boxes = torch.nan_to_num(boxes.clone(), nan=0.0, posinf=1e4, neginf=-1e4)
+        anchors = torch.nan_to_num(anchors.clone(), nan=0.0, posinf=1e4, neginf=-1e4)
         anchors[:, 3:6] = torch.clamp_min(anchors[:, 3:6], min=1e-5)
         boxes[:, 3:6] = torch.clamp_min(boxes[:, 3:6], min=1e-5)
 
@@ -40,7 +42,8 @@ class ResidualCoder(object):
             rts = [rg - ra]
 
         cts = [g - a for g, a in zip(cgs, cas)]
-        return torch.cat([xt, yt, zt, dxt, dyt, dzt, *rts, *cts], dim=-1)
+        encoded = torch.cat([xt, yt, zt, dxt, dyt, dzt, *rts, *cts], dim=-1)
+        return torch.nan_to_num(encoded, nan=0.0, posinf=10.0, neginf=-10.0)
 
     def decode_torch(self, box_encodings, anchors):
         """
@@ -51,6 +54,10 @@ class ResidualCoder(object):
         Returns:
 
         """
+        box_encodings = torch.nan_to_num(box_encodings, nan=0.0, posinf=10.0, neginf=-10.0)
+        anchors = torch.nan_to_num(anchors.clone(), nan=0.0, posinf=1e4, neginf=-1e4)
+        anchors[..., 3:6] = torch.clamp_min(anchors[..., 3:6], min=1e-5)
+
         xa, ya, za, dxa, dya, dza, ra, *cas = torch.split(anchors, 1, dim=-1)
         if not self.encode_angle_by_sincos:
             xt, yt, zt, dxt, dyt, dzt, rt, *cts = torch.split(box_encodings, 1, dim=-1)
@@ -62,6 +69,7 @@ class ResidualCoder(object):
         yg = yt * diagonal + ya
         zg = zt * dza + za
 
+        dxt, dyt, dzt = dxt.clamp(-10.0, 10.0), dyt.clamp(-10.0, 10.0), dzt.clamp(-10.0, 10.0)
         dxg = torch.exp(dxt) * dxa
         dyg = torch.exp(dyt) * dya
         dzg = torch.exp(dzt) * dza
@@ -74,7 +82,8 @@ class ResidualCoder(object):
             rg = rt + ra
 
         cgs = [t + a for t, a in zip(cts, cas)]
-        return torch.cat([xg, yg, zg, dxg, dyg, dzg, rg, *cgs], dim=-1)
+        decoded = torch.cat([xg, yg, zg, dxg, dyg, dzg, rg, *cgs], dim=-1)
+        return torch.nan_to_num(decoded, nan=0.0, posinf=1e4, neginf=-1e4)
 
 
 class PreviousResidualDecoder(object):
@@ -92,6 +101,10 @@ class PreviousResidualDecoder(object):
         Returns:
 
         """
+        box_encodings = torch.nan_to_num(box_encodings, nan=0.0, posinf=10.0, neginf=-10.0)
+        anchors = torch.nan_to_num(anchors.clone(), nan=0.0, posinf=1e4, neginf=-1e4)
+        anchors[..., 3:6] = torch.clamp_min(anchors[..., 3:6], min=1e-5)
+
         xa, ya, za, dxa, dya, dza, ra, *cas = torch.split(anchors, 1, dim=-1)
         xt, yt, zt, wt, lt, ht, rt, *cts = torch.split(box_encodings, 1, dim=-1)
 
@@ -100,13 +113,15 @@ class PreviousResidualDecoder(object):
         yg = yt * diagonal + ya
         zg = zt * dza + za
 
+        wt, lt, ht = wt.clamp(-10.0, 10.0), lt.clamp(-10.0, 10.0), ht.clamp(-10.0, 10.0)
         dxg = torch.exp(lt) * dxa
         dyg = torch.exp(wt) * dya
         dzg = torch.exp(ht) * dza
         rg = rt + ra
 
         cgs = [t + a for t, a in zip(cts, cas)]
-        return torch.cat([xg, yg, zg, dxg, dyg, dzg, rg, *cgs], dim=-1)
+        decoded = torch.cat([xg, yg, zg, dxg, dyg, dzg, rg, *cgs], dim=-1)
+        return torch.nan_to_num(decoded, nan=0.0, posinf=1e4, neginf=-1e4)
 
 
 class PreviousResidualRoIDecoder(object):
@@ -124,6 +139,10 @@ class PreviousResidualRoIDecoder(object):
         Returns:
 
         """
+        box_encodings = torch.nan_to_num(box_encodings, nan=0.0, posinf=10.0, neginf=-10.0)
+        anchors = torch.nan_to_num(anchors.clone(), nan=0.0, posinf=1e4, neginf=-1e4)
+        anchors[..., 3:6] = torch.clamp_min(anchors[..., 3:6], min=1e-5)
+
         xa, ya, za, dxa, dya, dza, ra, *cas = torch.split(anchors, 1, dim=-1)
         xt, yt, zt, wt, lt, ht, rt, *cts = torch.split(box_encodings, 1, dim=-1)
 
@@ -132,13 +151,15 @@ class PreviousResidualRoIDecoder(object):
         yg = yt * diagonal + ya
         zg = zt * dza + za
 
+        wt, lt, ht = wt.clamp(-10.0, 10.0), lt.clamp(-10.0, 10.0), ht.clamp(-10.0, 10.0)
         dxg = torch.exp(lt) * dxa
         dyg = torch.exp(wt) * dya
         dzg = torch.exp(ht) * dza
         rg = ra - rt
 
         cgs = [t + a for t, a in zip(cts, cas)]
-        return torch.cat([xg, yg, zg, dxg, dyg, dzg, rg, *cgs], dim=-1)
+        decoded = torch.cat([xg, yg, zg, dxg, dyg, dzg, rg, *cgs], dim=-1)
+        return torch.nan_to_num(decoded, nan=0.0, posinf=1e4, neginf=-1e4)
 
 
 class PointResidualCoder(object):
@@ -159,6 +180,8 @@ class PointResidualCoder(object):
         Returns:
             box_coding: (N, 8 + C)
         """
+        gt_boxes = torch.nan_to_num(gt_boxes.clone(), nan=0.0, posinf=1e4, neginf=-1e4)
+        points = torch.nan_to_num(points, nan=0.0, posinf=1e4, neginf=-1e4)
         gt_boxes[:, 3:6] = torch.clamp_min(gt_boxes[:, 3:6], min=1e-5)
 
         xg, yg, zg, dxg, dyg, dzg, rg, *cgs = torch.split(gt_boxes, 1, dim=-1)
@@ -184,7 +207,8 @@ class PointResidualCoder(object):
             dzt = torch.log(dzg)
 
         cts = [g for g in cgs]
-        return torch.cat([xt, yt, zt, dxt, dyt, dzt, torch.cos(rg), torch.sin(rg), *cts], dim=-1)
+        encoded = torch.cat([xt, yt, zt, dxt, dyt, dzt, torch.cos(rg), torch.sin(rg), *cts], dim=-1)
+        return torch.nan_to_num(encoded, nan=0.0, posinf=10.0, neginf=-10.0)
 
     def decode_torch(self, box_encodings, points, pred_classes=None):
         """
@@ -195,6 +219,9 @@ class PointResidualCoder(object):
         Returns:
 
         """
+        box_encodings = torch.nan_to_num(box_encodings, nan=0.0, posinf=10.0, neginf=-10.0)
+        points = torch.nan_to_num(points, nan=0.0, posinf=1e4, neginf=-1e4)
+
         xt, yt, zt, dxt, dyt, dzt, cost, sint, *cts = torch.split(box_encodings, 1, dim=-1)
         xa, ya, za = torch.split(points, 1, dim=-1)
 
@@ -207,6 +234,7 @@ class PointResidualCoder(object):
             yg = yt * diagonal + ya
             zg = zt * dza + za
 
+            dxt, dyt, dzt = dxt.clamp(-10.0, 10.0), dyt.clamp(-10.0, 10.0), dzt.clamp(-10.0, 10.0)
             dxg = torch.exp(dxt) * dxa
             dyg = torch.exp(dyt) * dya
             dzg = torch.exp(dzt) * dza
@@ -214,9 +242,11 @@ class PointResidualCoder(object):
             xg = xt + xa
             yg = yt + ya
             zg = zt + za
-            dxg, dyg, dzg = torch.split(torch.exp(box_encodings[..., 3:6]), 1, dim=-1)
+            box_dims = torch.exp(box_encodings[..., 3:6].clamp(-10.0, 10.0))
+            dxg, dyg, dzg = torch.split(box_dims, 1, dim=-1)
 
         rg = torch.atan2(sint, cost)
 
         cgs = [t for t in cts]
-        return torch.cat([xg, yg, zg, dxg, dyg, dzg, rg, *cgs], dim=-1)
+        decoded = torch.cat([xg, yg, zg, dxg, dyg, dzg, rg, *cgs], dim=-1)
+        return torch.nan_to_num(decoded, nan=0.0, posinf=1e4, neginf=-1e4)

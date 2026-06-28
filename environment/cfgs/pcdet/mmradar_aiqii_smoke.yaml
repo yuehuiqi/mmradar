@@ -39,7 +39,8 @@ DATA_PROCESSOR:
       'test': False
     }
   - NAME: transform_points_to_voxels
-    VOXEL_SIZE: [0.5, 0.5, 16]
+    # Match full config: 0.2m voxel -> 0.4m BEV cell for sub-meter aiQii drones.
+    VOXEL_SIZE: [0.2, 0.2, 16]
     MAX_POINTS_PER_VOXEL: 32
     MAX_NUMBER_OF_VOXELS: {
       'train': 12000,

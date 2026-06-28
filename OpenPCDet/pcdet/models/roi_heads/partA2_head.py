@@ -4,6 +4,7 @@ import torch.nn as nn
 
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils.spconv_utils import spconv
+from ..backbones_3d.spconv_backbone import SafeBatchNorm1d
 from .roi_head_template import RoIHeadTemplate
 
 
@@ -80,21 +81,21 @@ class PartA2FCHead(RoIHeadTemplate):
         if conv_type == 'subm':
             m = spconv.SparseSequential(
                 spconv.SubMConv3d(in_channels, out_channels, kernel_size, bias=False, indice_key=indice_key),
-                nn.BatchNorm1d(out_channels, eps=1e-3, momentum=0.01),
+                SafeBatchNorm1d(out_channels, eps=1e-3, momentum=0.01),
                 nn.ReLU(),
             )
         elif conv_type == 'spconv':
             m = spconv.SparseSequential(
                 spconv.SparseConv3d(in_channels, out_channels, kernel_size, stride=stride, padding=padding,
                                     bias=False, indice_key=indice_key),
-                nn.BatchNorm1d(out_channels, eps=1e-3, momentum=0.01),
+                SafeBatchNorm1d(out_channels, eps=1e-3, momentum=0.01),
                 nn.ReLU(),
             )
         elif conv_type == 'inverseconv':
             m = spconv.SparseSequential(
                 spconv.SparseInverseConv3d(in_channels, out_channels, kernel_size,
                                            indice_key=indice_key, bias=False),
-                nn.BatchNorm1d(out_channels, eps=1e-3, momentum=0.01),
+                SafeBatchNorm1d(out_channels, eps=1e-3, momentum=0.01),
                 nn.ReLU(),
             )
         else:

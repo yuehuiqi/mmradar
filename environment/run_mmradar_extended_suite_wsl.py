@@ -17,6 +17,10 @@ ENV_ROOT = Path("/home/yuehui/miniforge3/envs")
 RUN_ROOT = ROOT / "environment" / "extended_runs"
 LINUX_BASE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 TOTAL_EPOCHS = {"full": 80, "smoke": 1}
+EVAL_INTERVAL = 5
+MAX_EVAL_CHECKPOINTS = TOTAL_EPOCHS["full"] // EVAL_INTERVAL + 1
+DEFAULT_BEST_METRIC = "center_ap_2m"
+LOWER_IS_BETTER_METRICS = {"mean_best_center_distance"}
 
 
 @dataclass(frozen=True)
@@ -74,6 +78,16 @@ class Experiment:
     def metrics_history_path(self, dataset: str, run_tag: str, mode: str, aiqii_classes: str = "single") -> Path:
         return self.output_dir(dataset, run_tag, mode, aiqii_classes) / "periodic_metrics" / "metrics_history.json"
 
+    def latest_pcdet_checkpoint(self, dataset: str, run_tag: str, mode: str, aiqii_classes: str = "single") -> Path | None:
+        checkpoint_dir = self.output_dir(dataset, run_tag, mode, aiqii_classes) / "ckpt"
+        candidates = list(checkpoint_dir.glob("checkpoint_epoch_*.pth"))
+        latest_model = checkpoint_dir / "latest_model.pth"
+        if latest_model.exists():
+            candidates.append(latest_model)
+        if not candidates:
+            return None
+        return max(candidates, key=lambda path: path.stat().st_mtime)
+
     def cwd(self) -> Path:
         if self.kind == "pcdet":
             return self.project_root / "tools"
@@ -114,11 +128,23 @@ class Experiment:
                 f"train_dataloader.num_workers={workers}",
                 f"val_dataloader.num_workers={workers}",
             ]
+            if workers == 0:
+                cfg_options.extend([
+                    "train_dataloader.persistent_workers=False",
+                    "val_dataloader.persistent_workers=False",
+                    "test_dataloader.persistent_workers=False",
+                ])
             if mode == "smoke":
                 cfg_options.extend([
                     "train_cfg.max_epochs=1",
                     "train_cfg.val_interval=1",
                     "default_hooks.checkpoint.max_keep_ckpts=1",
+                ])
+            else:
+                cfg_options.extend([
+                    f"train_cfg.val_interval={EVAL_INTERVAL}",
+                    f"default_hooks.checkpoint.interval={EVAL_INTERVAL}",
+                    f"default_hooks.checkpoint.max_keep_ckpts={MAX_EVAL_CHECKPOINTS}",
                 ])
             if cfg_options:
                 cmd.extend([
@@ -140,9 +166,9 @@ class Experiment:
                 "--extra_tag",
                 run_tag,
                 "--ckpt_save_interval",
-                "1" if mode == "smoke" else "10",
+                "1" if mode == "smoke" else str(EVAL_INTERVAL),
                 "--max_ckpt_save_num",
-                "1" if mode == "smoke" else "9",
+                "1" if mode == "smoke" else str(MAX_EVAL_CHECKPOINTS),
                 "--max_waiting_mins",
                 "0",
             ]
@@ -162,16 +188,19 @@ class Experiment:
             "--extra_tag",
             run_tag,
             "--ckpt_save_interval",
-            "1" if mode == "smoke" else "10",
+            "1" if mode == "smoke" else str(EVAL_INTERVAL),
             "--max_ckpt_save_num",
-            "1" if mode == "smoke" else "9",
+            "1" if mode == "smoke" else str(MAX_EVAL_CHECKPOINTS),
             "--eval_interval",
-            "1" if mode == "smoke" else "5",
+            "1" if mode == "smoke" else str(EVAL_INTERVAL),
             "--max_waiting_mins",
             "0",
         ]
         if mode == "smoke":
             cmd.extend(["--epochs", "1"])
+        resume_ckpt = self.latest_pcdet_checkpoint(dataset, run_tag, mode, aiqii_classes)
+        if resume_ckpt is not None:
+            cmd.extend(["--ckpt", str(resume_ckpt)])
         return cmd
 
 
@@ -203,6 +232,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--radarnext-batch-size", type=int, default=None, help="Override RadarNeXt train dataloader batch size.")
     parser.add_argument("--retries", type=int, default=2, help="Retries after the first attempt.")
     parser.add_argument("--gpu", default="0")
+    parser.add_argument(
+        "--best-metric",
+        default=DEFAULT_BEST_METRIC,
+        help="Metric used to select the best validation epoch in summaries and checkpoint pruning.",
+    )
     parser.add_argument("--only", nargs="*", default=None)
     parser.add_argument("--skip", nargs="*", default=[])
     parser.add_argument("--stop-on-failure", action="store_true")
@@ -280,23 +314,101 @@ def final_metrics(exp: Experiment, dataset: str, run_tag: str, mode: str, aiqii_
     return max(history, key=lambda item: int(item.get("epoch", -1)))
 
 
+def metric_is_better(metric_name: str, candidate: float, current: float | None) -> bool:
+    if current is None:
+        return True
+    if metric_name in LOWER_IS_BETTER_METRICS or "distance" in metric_name:
+        return candidate < current
+    return candidate > current
+
+
+def best_metrics(
+    exp: Experiment,
+    dataset: str,
+    run_tag: str,
+    mode: str,
+    aiqii_classes: str,
+    best_metric: str = DEFAULT_BEST_METRIC,
+) -> dict | None:
+    history = metrics_history(exp, dataset, run_tag, mode, aiqii_classes)
+    best = None
+    best_value = None
+    for item in history:
+        value = item.get("metrics", {}).get(best_metric)
+        if not isinstance(value, (int, float)):
+            continue
+        if metric_is_better(best_metric, value, best_value):
+            best = item
+            best_value = value
+    return best if best is not None else final_metrics(exp, dataset, run_tag, mode, aiqii_classes)
+
+
+def per_metric_best(history: list[dict]) -> dict:
+    best = {}
+    for item in history:
+        epoch = item.get("epoch")
+        for key, value in item.get("metrics", {}).items():
+            if not isinstance(value, (int, float)):
+                continue
+            current = best.get(key)
+            if current is None or metric_is_better(key, value, current["value"]):
+                best[key] = {"epoch": epoch, "value": value}
+    return best
+
+
+def checkpoint_path_for_epoch(
+    exp: Experiment,
+    dataset: str,
+    run_tag: str,
+    mode: str,
+    aiqii_classes: str,
+    epoch,
+) -> Path | None:
+    if epoch is None:
+        return None
+    if exp.kind in ("pcdet", "radarpillar"):
+        return exp.output_dir(dataset, run_tag, mode, aiqii_classes) / "ckpt" / f"checkpoint_epoch_{int(epoch)}.pth"
+    return exp.output_dir(dataset, run_tag, mode, aiqii_classes) / f"epoch_{int(epoch)}.pth"
+
+
 def is_complete(exp: Experiment, dataset: str, run_tag: str, mode: str, aiqii_classes: str) -> bool:
     final = final_metrics(exp, dataset, run_tag, mode, aiqii_classes)
     return bool(final and int(final.get("epoch", -1)) >= TOTAL_EPOCHS[mode])
 
 
-def prune_checkpoints(exp: Experiment, dataset: str, run_tag: str, mode: str, aiqii_classes: str) -> None:
+def prune_checkpoints(
+    exp: Experiment,
+    dataset: str,
+    run_tag: str,
+    mode: str,
+    aiqii_classes: str,
+    best_metric: str = DEFAULT_BEST_METRIC,
+) -> None:
     output_dir = exp.output_dir(dataset, run_tag, mode, aiqii_classes)
     if exp.kind in ("pcdet", "radarpillar"):
         checkpoint_dir = output_dir / "ckpt"
+        latest_model = checkpoint_dir / "latest_model.pth"
+        if latest_model.exists() and mode == "full":
+            latest_model.unlink()
         pattern = "checkpoint_epoch_*.pth"
         regex = r"checkpoint_epoch_(\d+)\.pth"
-        limit = 1 if mode == "smoke" else 9
     else:
         checkpoint_dir = output_dir
         pattern = "epoch_*.pth"
         regex = r"epoch_(\d+)\.pth"
-        limit = 1 if mode == "smoke" else 10
+    if mode == "smoke":
+        keep_epochs = set()
+        final = final_metrics(exp, dataset, run_tag, mode, aiqii_classes)
+        if final is not None:
+            keep_epochs.add(int(final.get("epoch", -1)))
+    else:
+        final = final_metrics(exp, dataset, run_tag, mode, aiqii_classes)
+        best = best_metrics(exp, dataset, run_tag, mode, aiqii_classes, best_metric)
+        keep_epochs = set()
+        if final is not None:
+            keep_epochs.add(int(final.get("epoch", -1)))
+        if best is not None:
+            keep_epochs.add(int(best.get("epoch", -1)))
 
     checkpoints = []
     for path in checkpoint_dir.glob(pattern):
@@ -304,8 +416,26 @@ def prune_checkpoints(exp: Experiment, dataset: str, run_tag: str, mode: str, ai
         if match:
             checkpoints.append((int(match.group(1)), path))
     checkpoints.sort(key=lambda item: item[0])
-    for _, path in checkpoints[:-limit]:
-        path.unlink()
+    for epoch, path in checkpoints:
+        if epoch not in keep_epochs:
+            path.unlink()
+
+    if mode == "full":
+        best = best_metrics(exp, dataset, run_tag, mode, aiqii_classes, best_metric)
+        best_path = checkpoint_path_for_epoch(
+            exp, dataset, run_tag, mode, aiqii_classes, best.get("epoch") if best else None
+        )
+        final_path = checkpoint_path_for_epoch(
+            exp, dataset, run_tag, mode, aiqii_classes, final.get("epoch") if final else None
+        )
+        write_json(output_dir / "best_checkpoint.json", {
+            "selection_metric": best_metric,
+            "best_epoch": best.get("epoch") if best else None,
+            "best_metric_value": (best.get("metrics", {}) or {}).get(best_metric) if best else None,
+            "best_checkpoint": str(best_path) if best_path and best_path.exists() else None,
+            "last_epoch": final.get("epoch") if final else None,
+            "last_checkpoint": str(final_path) if final_path and final_path.exists() else None,
+        })
 
 
 def metric(metrics: dict, key: str) -> str:
@@ -317,25 +447,45 @@ def metric(metrics: dict, key: str) -> str:
     return f"{100 * value:.2f}%"
 
 
-def write_summary(run_dir: Path, dataset: str, run_tag: str, mode: str, statuses: dict, aiqii_classes: str) -> None:
+def write_summary(
+    run_dir: Path,
+    dataset: str,
+    run_tag: str,
+    mode: str,
+    statuses: dict,
+    aiqii_classes: str,
+    best_metric: str = DEFAULT_BEST_METRIC,
+) -> None:
     rows = []
     full_results = {}
     for exp in EXPERIMENTS:
         status = statuses.get(exp.name, {"state": "pending"})
         history = metrics_history(exp, dataset, run_tag, mode, aiqii_classes)
         final = final_metrics(exp, dataset, run_tag, mode, aiqii_classes)
-        metrics = final.get("metrics", {}) if final else {}
+        best = best_metrics(exp, dataset, run_tag, mode, aiqii_classes, best_metric)
+        metrics = best.get("metrics", {}) if best else {}
+        best_path = checkpoint_path_for_epoch(
+            exp, dataset, run_tag, mode, aiqii_classes, best.get("epoch") if best else None
+        )
+        final_path = checkpoint_path_for_epoch(
+            exp, dataset, run_tag, mode, aiqii_classes, final.get("epoch") if final else None
+        )
         full_results[exp.name] = {
             "status": status,
+            "best": best,
             "final": final,
+            "selection_metric": best_metric,
+            "per_metric_best": per_metric_best(history),
             "history": history,
             "output_dir": str(exp.output_dir(dataset, run_tag, mode, aiqii_classes)),
+            "best_checkpoint": str(best_path) if best_path and best_path.exists() else None,
+            "last_checkpoint": str(final_path) if final_path and final_path.exists() else None,
         }
         rows.append(
             "| {name} | {state} | {epoch} | {center2} | {center4} | {bev25} | {bev50} | {iou25} | {iou50} | {dist} |".format(
                 name=exp.name,
                 state=status.get("state", "pending"),
-                epoch=final.get("epoch", "-") if final else "-",
+                epoch=best.get("epoch", "-") if best else "-",
                 center2=metric(metrics, "center_ap_2m"),
                 center4=metric(metrics, "center_ap_4m"),
                 bev25=metric(metrics, "bev_iou_ap_0.25"),
@@ -355,6 +505,17 @@ def write_summary(run_dir: Path, dataset: str, run_tag: str, mode: str, statuses
         *rows,
         "",
         "完整历史指标见 `EXTENDED_MODELS_METRICS.json`；各模型自己的周期指标仍保存在对应 output/work_dirs 目录。",
+    ]
+    md = [
+        f"# MMRadar extended suite metrics: {dataset} / {aiqii_classes} / {run_tag} / {mode}",
+        "",
+        f"- table uses best validation epoch selected by `{best_metric}`.",
+        "- full metric histories are in `EXTENDED_MODELS_METRICS.json` and each model's output/work_dir.",
+        "",
+        "| Model | State | Best epoch | Center AP@2m | Center AP@4m | BEV AP@0.25 | BEV AP@0.5 | 3D AP@0.25 | 3D AP@0.5 | Mean center dist |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        *rows,
+        "",
     ]
     (run_dir / "EXTENDED_MODELS_METRICS.md").write_text("\n".join(md), encoding="utf-8")
 
@@ -459,9 +620,9 @@ def main() -> int:
                     text=True,
                 )
 
-            prune_checkpoints(exp, args.dataset, args.run_tag, args.mode, args.aiqii_classes)
             elapsed = round(time.time() - started, 2)
             if proc.returncode == 0:
+                prune_checkpoints(exp, args.dataset, args.run_tag, args.mode, args.aiqii_classes, args.best_metric)
                 success = True
                 statuses[exp.name] = {
                     "state": "ok",
@@ -487,15 +648,15 @@ def main() -> int:
         if not success:
             statuses[exp.name]["state"] = "failed"
             if args.stop_on_failure:
-                write_summary(run_dir, args.dataset, args.run_tag, args.mode, statuses, args.aiqii_classes)
+                write_summary(run_dir, args.dataset, args.run_tag, args.mode, statuses, args.aiqii_classes, args.best_metric)
                 write_json(run_dir / "suite_status.json", statuses)
                 return 1
 
         write_json(run_dir / "suite_status.json", statuses)
-        write_summary(run_dir, args.dataset, args.run_tag, args.mode, statuses, args.aiqii_classes)
+        write_summary(run_dir, args.dataset, args.run_tag, args.mode, statuses, args.aiqii_classes, args.best_metric)
 
     write_json(run_dir / "suite_status.json", statuses)
-    write_summary(run_dir, args.dataset, args.run_tag, args.mode, statuses, args.aiqii_classes)
+    write_summary(run_dir, args.dataset, args.run_tag, args.mode, statuses, args.aiqii_classes, args.best_metric)
     failed = any(status.get("state") == "failed" for status in statuses.values())
     print(f"[DONE] summary={run_dir / 'EXTENDED_MODELS_METRICS.md'}", flush=True)
     return 1 if failed else 0

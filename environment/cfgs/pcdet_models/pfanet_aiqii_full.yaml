@@ -1,0 +1,8 @@
+# PFA-Net (RPFA-Net): PointPillars pipeline with a self-attention pillar encoder.
+# Inherits the full PointPillar aiQii config (data + 80 epochs) and swaps the VFE.
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/pointpillar_aiqii_full.yaml
+
+MODEL:
+  VFE:
+    NAME: RadarPillarFeatureAttention
+    NUM_HEADS: 2

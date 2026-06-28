@@ -39,7 +39,10 @@ DATA_PROCESSOR:
       'test': False
     }
   - NAME: transform_points_to_voxels
-    VOXEL_SIZE: [0.5, 0.5, 16]
+    # aiQii drones are sub-meter (mean box ~0.47x0.44x0.19m). A 0.5m voxel with
+    # feature_map_stride 2 gives a 1.0m BEV cell -- larger than the target box,
+    # which quantizes the center and starves anchor matching. 0.2m -> 0.4m cell.
+    VOXEL_SIZE: [0.2, 0.2, 16]
     MAX_POINTS_PER_VOXEL: 32
     MAX_NUMBER_OF_VOXELS: {
       'train': 12000,

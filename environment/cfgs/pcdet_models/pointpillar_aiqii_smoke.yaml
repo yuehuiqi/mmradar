@@ -40,8 +40,11 @@ MODEL:
         'anchor_bottom_heights': [-0.10],
         'align_center': False,
         'feature_map_stride': 2,
-        'matched_threshold': 0.45,
-        'unmatched_threshold': 0.25
+        # Lowered for sub-meter boxes: at a 0.4m anchor grid the nearest anchor to
+        # a 0.47m GT reaches only ~0.4 IoU, so 0.45/0.25 left many GTs with no
+        # positive anchor. 0.3/0.15 restores positive samples.
+        'matched_threshold': 0.3,
+        'unmatched_threshold': 0.15
       }
     ]
     TARGET_ASSIGNER_CONFIG:

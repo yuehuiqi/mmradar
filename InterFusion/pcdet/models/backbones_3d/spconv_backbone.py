@@ -2,6 +2,18 @@ from functools import partial
 
 from spconv import pytorch as spconv
 import torch.nn as nn
+import torch.nn.functional as F
+
+
+class SafeBatchNorm1d(nn.BatchNorm1d):
+    def forward(self, input):
+        elements_per_channel = input.numel() // input.size(1)
+        if self.training and elements_per_channel <= 1:
+            return F.batch_norm(
+                input, self.running_mean, self.running_var, self.weight, self.bias,
+                False, self.momentum, self.eps
+            )
+        return super().forward(input)
 
 
 def post_act_block(in_channels, out_channels, kernel_size, indice_key=None, stride=1, padding=0,
@@ -69,7 +81,7 @@ class VoxelBackBone8x(nn.Module):
     def __init__(self, model_cfg, input_channels, grid_size, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
-        norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
+        norm_fn = partial(SafeBatchNorm1d, eps=1e-3, momentum=0.01)
 
         self.sparse_shape = grid_size[::-1] + [1, 0, 0]
 
@@ -109,7 +121,7 @@ class VoxelBackBone8x(nn.Module):
         last_pad = self.model_cfg.get('last_pad', last_pad)
         self.conv_out = spconv.SparseSequential(
             # [200, 150, 5] -> [200, 150, 2]
-            spconv.SparseConv3d(64, 128, (3, 1, 1), stride=(2, 1, 1), padding=last_pad,
+            spconv.SparseConv3d(64, 128, (3, 1, 1), stride=(2, 1, 1), padding=(last_pad, 0, 0),
                                 bias=False, indice_key='spconv_down2'),
             norm_fn(128),
             nn.ReLU(),
@@ -167,7 +179,7 @@ class VoxelResBackBone8x(nn.Module):
     def __init__(self, model_cfg, input_channels, grid_size, **kwargs):
         super().__init__()
         self.model_cfg = model_cfg
-        norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
+        norm_fn = partial(SafeBatchNorm1d, eps=1e-3, momentum=0.01)
 
         self.sparse_shape = grid_size[::-1] + [1, 0, 0]
 
@@ -208,7 +220,7 @@ class VoxelResBackBone8x(nn.Module):
         last_pad = self.model_cfg.get('last_pad', last_pad)
         self.conv_out = spconv.SparseSequential(
             # [200, 150, 5] -> [200, 150, 2]
-            spconv.SparseConv3d(128, 128, (3, 1, 1), stride=(2, 1, 1), padding=last_pad,
+            spconv.SparseConv3d(128, 128, (3, 1, 1), stride=(2, 1, 1), padding=(last_pad, 0, 0),
                                 bias=False, indice_key='spconv_down2'),
             norm_fn(128),
             nn.ReLU(),

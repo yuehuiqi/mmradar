@@ -1,9 +1,25 @@
-_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/pointpillar_aiqii_smoke.yaml
+# InterFusion (radar-only), 4-class aiQii.
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/interfusion_aiqii_smoke.yaml
 
 CLASS_NAMES: ['Air3S', 'Mini4pro', 'Mavic3Pro', 'jingling4']
 
 DATA_CONFIG:
   _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_aiqii_multiclass_smoke.yaml
+  DATA_PROCESSOR:
+    - NAME: mask_points_and_boxes_outside_range
+      REMOVE_OUTSIDE_BOXES: True
+    - NAME: shuffle_points
+      SHUFFLE_ENABLED: {
+        'train': True,
+        'test': False
+      }
+    - NAME: transform_points_to_voxels
+      VOXEL_SIZE: [0.25, 0.25, 0.5]
+      MAX_POINTS_PER_VOXEL: 5
+      MAX_NUMBER_OF_VOXELS: {
+        'train': 16000,
+        'test': 40000
+      }
 
 MODEL:
   DENSE_HEAD:
@@ -14,9 +30,9 @@ MODEL:
         'anchor_rotations': [0, 1.57],
         'anchor_bottom_heights': [-0.07],
         'align_center': False,
-        'feature_map_stride': 2,
-        'matched_threshold': 0.3,
-        'unmatched_threshold': 0.15
+        'feature_map_stride': 8,
+        'matched_threshold': 0.25,
+        'unmatched_threshold': 0.1
       },
       {
         'class_name': 'Mini4pro',
@@ -24,9 +40,9 @@ MODEL:
         'anchor_rotations': [0, 1.57],
         'anchor_bottom_heights': [-0.06],
         'align_center': False,
-        'feature_map_stride': 2,
-        'matched_threshold': 0.3,
-        'unmatched_threshold': 0.15
+        'feature_map_stride': 8,
+        'matched_threshold': 0.25,
+        'unmatched_threshold': 0.1
       },
       {
         'class_name': 'Mavic3Pro',
@@ -34,9 +50,9 @@ MODEL:
         'anchor_rotations': [0, 1.57],
         'anchor_bottom_heights': [-0.07],
         'align_center': False,
-        'feature_map_stride': 2,
-        'matched_threshold': 0.3,
-        'unmatched_threshold': 0.15
+        'feature_map_stride': 8,
+        'matched_threshold': 0.25,
+        'unmatched_threshold': 0.1
       },
       {
         'class_name': 'jingling4',
@@ -44,9 +60,8 @@ MODEL:
         'anchor_rotations': [0, 1.57],
         'anchor_bottom_heights': [-0.15],
         'align_center': False,
-        'feature_map_stride': 2,
-        'matched_threshold': 0.3,
-        'unmatched_threshold': 0.15
+        'feature_map_stride': 8,
+        'matched_threshold': 0.25,
+        'unmatched_threshold': 0.1
       }
     ]
-

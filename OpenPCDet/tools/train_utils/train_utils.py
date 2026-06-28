@@ -55,9 +55,41 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
         with torch.cuda.amp.autocast(enabled=use_amp):
             loss, tb_dict, disp_dict = model_func(model, batch)
 
+        if not torch.isfinite(loss).all():
+            accumulated_iter += 1
+            if rank == 0:
+                if logger is not None:
+                    logger.warning(
+                        'Skip non-finite loss at epoch=%s iter=%s acc_iter=%s loss=%s tb=%s',
+                        cur_epoch, cur_it, accumulated_iter, loss.detach().item(), tb_dict
+                    )
+                pbar.update()
+                pbar.set_postfix(dict(total_it=accumulated_iter, skipped='nonfinite_loss'))
+                if tb_log is not None:
+                    tb_log.add_scalar('train/nonfinite_loss_skip', 1, accumulated_iter)
+            end = time.time()
+            continue
+
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
-        clip_grad_norm_(model.parameters(), optim_cfg.GRAD_NORM_CLIP)
+        grad_norm = clip_grad_norm_(model.parameters(), optim_cfg.GRAD_NORM_CLIP)
+        grad_norm_tensor = grad_norm if isinstance(grad_norm, torch.Tensor) else torch.tensor(grad_norm)
+        if not torch.isfinite(grad_norm_tensor).all():
+            optimizer.zero_grad()
+            scaler.update()
+            accumulated_iter += 1
+            if rank == 0:
+                if logger is not None:
+                    logger.warning(
+                        'Skip non-finite grad at epoch=%s iter=%s acc_iter=%s grad_norm=%s tb=%s',
+                        cur_epoch, cur_it, accumulated_iter, grad_norm, tb_dict
+                    )
+                pbar.update()
+                pbar.set_postfix(dict(total_it=accumulated_iter, skipped='nonfinite_grad'))
+                if tb_log is not None:
+                    tb_log.add_scalar('train/nonfinite_grad_skip', 1, accumulated_iter)
+            end = time.time()
+            continue
         scaler.step(optimizer)
         scaler.update()
 

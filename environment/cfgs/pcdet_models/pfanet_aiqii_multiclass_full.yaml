@@ -1,0 +1,7 @@
+# PFA-Net (RPFA-Net), 4-class aiQii full: PointPillars pipeline + self-attention VFE.
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/pointpillar_aiqii_multiclass_full.yaml
+
+MODEL:
+  VFE:
+    NAME: RadarPillarFeatureAttention
+    NUM_HEADS: 2

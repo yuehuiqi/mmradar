@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class BaseBEVBackbone(nn.Module):
@@ -83,6 +84,16 @@ class BaseBEVBackbone(nn.Module):
 
         self.num_bev_features = c_in
 
+    @staticmethod
+    def align_bev_feature(x, target_hw):
+        target_h, target_w = target_hw
+        x = x[..., :target_h, :target_w]
+        pad_h = target_h - x.shape[-2]
+        pad_w = target_w - x.shape[-1]
+        if pad_h > 0 or pad_w > 0:
+            x = F.pad(x, (0, max(pad_w, 0), 0, max(pad_h, 0)))
+        return x
+
     def forward(self, data_dict):
         """
         Args:
@@ -117,6 +128,8 @@ class BaseBEVBackbone(nn.Module):
 
         # If upsampling exists, then concatenate the upsampling results.
         if len(ups) > 1:
+            target_hw = ups[0].shape[-2:]
+            ups = [self.align_bev_feature(up, target_hw) for up in ups]
             x = torch.cat(ups, dim=1)
         elif len(ups) == 1:
             x = ups[0]

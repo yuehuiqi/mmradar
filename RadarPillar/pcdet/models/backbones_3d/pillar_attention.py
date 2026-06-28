@@ -40,8 +40,10 @@ class PillarAttention(nn.Module):
     def forward(self, batch_dict):
             pillar_features = batch_dict['pillar_features'] # (num_pillars, C)
             coords = batch_dict['voxel_coords']             # (num_pillars, 4) [batch_idx, z, y, x]
+            if pillar_features.dim() == 1:
+                pillar_features = pillar_features.unsqueeze(0)
             
-            batch_size = coords[:, 0].max().int().item() + 1
+            batch_size = batch_dict.get('batch_size', coords[:, 0].max().int().item() + 1)
             
             # 4. DEĞİŞİKLİK: FOR DÖNGÜSÜNDEN KURTULMA VE MASKELİ PADDING SİSTEMİ
             # Her batch'teki pillar sayılarını buluyoruz
@@ -79,9 +81,10 @@ class PillarAttention(nn.Module):
 
             # 6. DEĞİŞİKLİK: SONUCU ESKİ FORMATA (LIST) GERİ DÖNDÜRME
             # Padding'leri atıp tekrar OpenPCDet'in beklediği (num_pillars, C) haline getiriyoruz
-            updated_features = []
+            updated_features = pillar_features.new_empty((pillar_features.shape[0], x.shape[-1]))
             for b in range(batch_size):
-                updated_features.append(x[b, :pillar_counts[b]])
+                mask = coords[:, 0] == b
+                updated_features[mask] = x[b, :pillar_counts[b]]
                 
-            batch_dict['pillar_features'] = torch.cat(updated_features, dim=0)
+            batch_dict['pillar_features'] = updated_features
             return batch_dict

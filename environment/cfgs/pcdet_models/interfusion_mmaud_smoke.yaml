@@ -1,0 +1,36 @@
+# InterFusion (radar-only), MMAUD single-class Drone.
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/interfusion_aiqii_smoke.yaml
+
+DATA_CONFIG:
+  _BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet/mmradar_mmaud_smoke.yaml
+  DATA_PROCESSOR:
+    - NAME: mask_points_and_boxes_outside_range
+      REMOVE_OUTSIDE_BOXES: True
+    - NAME: shuffle_points
+      SHUFFLE_ENABLED: {
+        'train': True,
+        'test': False
+      }
+    - NAME: transform_points_to_voxels
+      # MMAUD boxes are a fixed 3m; z=0.5 keeps the z-grid at 32 (-> 256 BEV feat).
+      VOXEL_SIZE: [0.5, 0.5, 0.5]
+      MAX_POINTS_PER_VOXEL: 5
+      MAX_NUMBER_OF_VOXELS: {
+        'train': 16000,
+        'test': 40000
+      }
+
+MODEL:
+  DENSE_HEAD:
+    ANCHOR_GENERATOR_CONFIG: [
+      {
+        'class_name': 'Drone',
+        'anchor_sizes': [[2.0, 3.0, 3.0]],
+        'anchor_rotations': [0, 1.57],
+        'anchor_bottom_heights': [-1.5],
+        'align_center': False,
+        'feature_map_stride': 8,
+        'matched_threshold': 0.45,
+        'unmatched_threshold': 0.25
+      }
+    ]
