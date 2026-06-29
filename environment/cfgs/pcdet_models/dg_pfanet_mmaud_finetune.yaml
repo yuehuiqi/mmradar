@@ -1,0 +1,8 @@
+# Stage-2 adaptation of DG-PFA from a trained PFA checkpoint.
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/dg_pfanet_mmaud_full.yaml
+
+OPTIMIZATION:
+  NUM_EPOCHS: 5
+  LR: 0.0003
+  PCT_START: 0.2
+  WEIGHT_DECAY: 0.01

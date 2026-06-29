@@ -1,0 +1,34 @@
+# Proposed DG-PFA model on the MMAUD smoke split.
+# The original pfanet_mmaud_smoke.yaml remains the RPFA/PFA baseline.
+_BASE_CONFIG_: /mnt/e/Scholar/mmradarDetect/environment/cfgs/pcdet_models/pfanet_mmaud_smoke.yaml
+
+MODEL:
+  VFE:
+    NAME: DynamicGraphRadarPillarFeatureAttention
+    NUM_HEADS: 2
+    MEAN_POOL_SCALE: 0.5
+    FINAL_FUSION_GATE_INIT: 0.25
+    INFERENCE_FUSION_SCALE: 1.0
+
+    GRAPH:
+      NUM_LAYERS: 2
+      K: 8
+      NEIGHBOR_MODE: hybrid
+      FEATURE_WEIGHT: 1.0
+      POSITION_WEIGHT: 0.25
+      POSITION_SCALE: 4.0
+      QUERY_CHUNK_SIZE: 512
+      USE_POSITION_DELTA: True
+      USE_GLOBAL_CONTEXT: False
+      RESIDUAL_SCALE: 0.5
+
+    # MMAUD has XYZ plus a synthetic constant intensity. Consequently the
+    # motion and real-RCS branches are deliberately disabled for this dataset.
+    AUX_ATTENTION:
+      ENABLED: True
+      MAX_POINTS: 32
+      MOTION_FEATURE_INDEX: -1
+      INTENSITY_FEATURE_INDEX: -1
+      USE_STRUCTURE: True
+      USE_RANGE: False
+      GATE_SCALE: 0.5
